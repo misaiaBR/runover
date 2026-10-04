@@ -91,6 +91,12 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  void applyUpdatedProfile(UserProfile updated) {
+    if (profile?.id != updated.id) return;
+    profile = updated;
+    notifyListeners();
+  }
+
   Future<void> refreshProfile() async {
     profile = await api.getMyProfile();
     notifyListeners();
@@ -134,9 +140,12 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> logout() async {
-    await api.logout();
-    profile = null;
-    status = AuthStatus.signedOut;
-    notifyListeners();
+    try {
+      await api.logout();
+    } finally {
+      profile = null;
+      status = AuthStatus.signedOut;
+      notifyListeners();
+    }
   }
 }

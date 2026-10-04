@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models.dart';
-import '../services/api_client.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/level_badge.dart';
 import 'terms_screen.dart';
+import 'edit_profile_screen.dart';
 import 'runs_screen.dart';
 import '../widgets/profile_activity.dart';
 
@@ -167,7 +167,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
-                  onPressed: () => _openEditSheet(context, profile),
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => EditProfileScreen(profile: profile),
+                    ),
+                  ),
                   icon: const Icon(Icons.edit_outlined, size: 18),
                   label: const Text('Editar perfil'),
                 ),
@@ -373,113 +377,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       subtitle: Text(subtitle),
       trailing: const Icon(Icons.chevron_right),
       onTap: onTap,
-    );
-  }
-
-  void _openEditSheet(BuildContext context, UserProfile profile) {
-    final nameCtrl = TextEditingController(text: profile.fullName);
-    final usernameCtrl = TextEditingController(text: profile.username);
-    final photoCtrl = TextEditingController(text: profile.photoUrl ?? '');
-    final passwordCtrl = TextEditingController();
-    bool isPublic = profile.isPublic;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (sheetCtx) => StatefulBuilder(
-        builder: (sheetCtx, setSheetState) => Padding(
-          padding: EdgeInsets.only(
-            left: 24,
-            right: 24,
-            top: 24,
-            bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + 24,
-          ),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'Editar perfil',
-                  style: Theme.of(sheetCtx).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: nameCtrl,
-                  decoration: const InputDecoration(labelText: 'Nome'),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: usernameCtrl,
-                  decoration: const InputDecoration(labelText: 'Nickname'),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: photoCtrl,
-                  keyboardType: TextInputType.url,
-                  decoration: const InputDecoration(
-                    labelText: 'Foto de perfil — URL',
-                    hintText: 'https://...  (deixe vazio para remover)',
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: passwordCtrl,
-                  obscureText: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Nova senha (opcional)',
-                  ),
-                ),
-                const SizedBox(height: 4),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  value: isPublic,
-                  onChanged: (v) => setSheetState(() => isPublic = v),
-                  title: const Text('Perfil público'),
-                  subtitle: const Text(
-                    'Se desligado, outros jogadores não veem seu perfil (RF05/RN13).',
-                    style: TextStyle(fontSize: 12),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                FilledButton(
-                  onPressed: () async {
-                    final appState = context.read<AppState>();
-                    try {
-                      await appState.api.updateProfile(
-                        fullName: nameCtrl.text.trim(),
-                        username: usernameCtrl.text.trim(),
-                        photoUrl: photoCtrl.text.trim(),
-                        password: passwordCtrl.text.isEmpty
-                            ? null
-                            : passwordCtrl.text,
-                        isPublic: isPublic,
-                      );
-                      if (passwordCtrl.text.isNotEmpty) {
-                        if (sheetCtx.mounted) Navigator.of(sheetCtx).pop();
-                        await appState.logout();
-                        return;
-                      }
-                      await appState.refreshProfile();
-                      if (sheetCtx.mounted) Navigator.of(sheetCtx).pop();
-                    } on ApiException catch (e) {
-                      if (sheetCtx.mounted) {
-                        ScaffoldMessenger.of(
-                          sheetCtx,
-                        ).showSnackBar(SnackBar(content: Text(e.message)));
-                      }
-                    }
-                  },
-                  child: const Text('Salvar'),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

@@ -60,8 +60,8 @@ class ApiClient {
   }
 
   Future<void> logout() async {
-    await (await SharedPreferences.getInstance()).remove(_tokenKey);
     _token = null;
+    await (await SharedPreferences.getInstance()).remove(_tokenKey);
   }
 
   void close() => _http.close();
