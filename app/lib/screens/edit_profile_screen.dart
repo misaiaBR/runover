@@ -154,7 +154,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         setState(() => _error = 'A imagem ficou grande demais. Escolha uma foto menor.');
         return;
       }
-      _photo.text = 'data:$mimeType;base64:${base64Encode(bytes)}';
+      _photo.text = 'data:$mimeType;base64,${base64Encode(bytes)}';
       setState(() => _editingPhoto = false);
     } catch (_) {
       if (mounted) {
