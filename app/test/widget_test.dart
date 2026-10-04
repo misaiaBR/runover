@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:runover_app/screens/login_screen.dart';
 import 'package:runover_app/screens/profile_screen.dart';
+import 'package:runover_app/screens/register_screen.dart';
 import 'package:runover_app/state/app_state.dart';
 import 'package:runover_app/theme.dart';
 
@@ -22,9 +23,15 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Entrar'), findsOneWidget);
-    expect(find.text('Cadastre-se'), findsOneWidget);
+    expect(find.text('Criar conta'), findsOneWidget);
     expect(find.text('Esqueceu a senha?'), findsOneWidget);
     expect(find.text('Domine territórios correndo.'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('Criar conta'));
+    await tester.tap(find.text('Criar conta'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(RegisterScreen), findsOneWidget);
   });
 
   test('RF19 — tempo de jogo é formatado em horas e minutos', () {

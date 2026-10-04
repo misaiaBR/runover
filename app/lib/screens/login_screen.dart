@@ -330,45 +330,48 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       );
 
-  Widget get _accountOptions => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          CheckboxListTile(
-            value: _rememberEmail,
-            onChanged: (value) async {
-              setState(() => _rememberEmail = value ?? false);
-              await _persistRememberedEmail();
-            },
-            contentPadding: EdgeInsets.zero,
-            controlAffinity: ListTileControlAffinity.leading,
-            dense: true,
-            visualDensity: VisualDensity.compact,
-            activeColor: RunoverColors.route,
-            checkColor: Colors.white,
-            side: BorderSide(color: RunoverColors.paper.withValues(alpha: 0.6)),
-            title: Text(
-              'Lembrar e-mail',
-              style: TextStyle(
-                color: RunoverColors.paper.withValues(alpha: 0.9),
-                fontSize: 13,
+  Widget get _accountOptions => Material(
+        type: MaterialType.transparency,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            CheckboxListTile(
+              value: _rememberEmail,
+              onChanged: (value) async {
+                setState(() => _rememberEmail = value ?? false);
+                await _persistRememberedEmail();
+              },
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              dense: true,
+              visualDensity: VisualDensity.compact,
+              activeColor: RunoverColors.route,
+              checkColor: Colors.white,
+              side: BorderSide(color: RunoverColors.paper.withValues(alpha: 0.6)),
+              title: Text(
+                'Lembrar e-mail',
+                style: TextStyle(
+                  color: RunoverColors.paper.withValues(alpha: 0.9),
+                  fontSize: 13,
+                ),
               ),
             ),
-          ),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton(
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const ForgotPasswordScreen()),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const ForgotPasswordScreen()),
+                ),
+                style: TextButton.styleFrom(
+                  foregroundColor: RunoverColors.routeDark,
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+                child: const Text('Esqueceu a senha?'),
               ),
-              style: TextButton.styleFrom(
-                foregroundColor: RunoverColors.routeDark,
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-              ),
-              child: const Text('Esqueceu a senha?'),
             ),
-          ),
-        ],
+          ],
+        ),
       );
 
   Widget get _errorMessage => Container(
