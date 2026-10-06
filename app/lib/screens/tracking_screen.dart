@@ -127,6 +127,52 @@ class _TrackingScreenState extends State<TrackingScreen>
     }
   }
 
+  /// Conquista só sobre território selvagem: fora dele, a corrida segue
+  /// normal (km conta no perfil) sem valer território. Devolve o motivo
+  /// quando rebaixa, ou null quando mantém a conquista.
+  Future<String?> _downgradeIfOutsideWild() async {
+    final api = context.read<AppState>().api;
+    try {
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.best,
+          timeLimit: Duration(seconds: 15),
+        ),
+      );
+      final wilds = await api.wildSpawns(pos.latitude, pos.longitude);
+      final inside = wilds.any(
+        (w) =>
+            Geolocator.distanceBetween(
+              pos.latitude,
+              pos.longitude,
+              w.center.lat,
+              w.center.lng,
+            ) <=
+            w.radiusM + (pos.accuracy.isFinite ? pos.accuracy : 0),
+      );
+      if (!inside && mounted) {
+        setState(() {
+          _draft!.conquer = false;
+        });
+        await _persist();
+        return 'Fora de território selvagem: valendo como corrida normal. '
+            'O km conta no perfil, sem conquista.';
+      }
+      return null;
+    } catch (_) {
+      // Sem verificação: segue como corrida normal; o servidor valida.
+      if (mounted) {
+        setState(() {
+          _draft!.conquer = false;
+        });
+        await _persist();
+        return 'Sem posição inicial: valendo como corrida normal. '
+            'O km conta no perfil, sem conquista.';
+      }
+      return null;
+    }
+  }
+
   Future<void> _start() async {
     if (_starting || _recording || _draft == null || _draft!.queued) return;
     setState(() => _starting = true);
@@ -148,12 +194,17 @@ class _TrackingScreenState extends State<TrackingScreen>
         );
       }
       if (!mounted) return;
+      String? notice;
+      if (_draft!.conquer) {
+        notice = await _downgradeIfOutsideWild();
+        if (!mounted) return;
+      }
       _draft!.beginSegment();
       await _store!.save(_draft!);
       if (!mounted) return;
       setState(() {
         _recording = true;
-        _message = null;
+        _message = notice;
         _permissionBlocked = false;
       });
       _subscription =
