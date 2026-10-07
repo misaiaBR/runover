@@ -13,6 +13,8 @@ Os botões usam o backend do RUNOVER para verificar os tokens e abrir uma sessã
 
 O Google para Web mostra o botão oficial do SDK. Na Web, cadastre o endereço HTTPS do site como origem autorizada no Google Cloud.
 
+Configurado em produção: ID Web `346362177621-g8li6h47ic6sot55p68700a0lgpqo01v.apps.googleusercontent.com` (Dockerfile + `GOOGLE_OAUTH_CLIENT_IDS` no Render). Cliente Android ainda pendente.
+
 ## Apple
 
 O Sign in with Apple exige uma conta ativa do Apple Developer Program. No portal Apple, habilite essa capacidade e crie um **Service ID**. Para Android e Web, cadastre o domínio HTTPS do app e o retorno:
