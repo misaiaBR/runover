@@ -7,8 +7,11 @@ import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:runover_app/models.dart';
 import 'package:runover_app/screens/map_screen.dart';
 import 'package:runover_app/services/api_client.dart';
+import 'package:runover_app/services/map_cache.dart';
 import 'package:runover_app/services/position_refiner.dart';
 import 'package:runover_app/state/app_state.dart';
 
@@ -296,5 +299,51 @@ void main() {
     await tester.pump();
     expect(stream.hasListener, isFalse);
     unawaited(stream.close());
+  });
+
+  testWidgets('cached territories paint while network fails', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await MapCache.save([
+      Territory(
+        id: 'cacheada',
+        name: 'cacheada',
+        coordinates: const [
+          LatLngPoint(-23.701, -46.7),
+          LatLngPoint(-23.701, -46.699),
+          LatLngPoint(-23.699, -46.699),
+          LatLngPoint(-23.699, -46.7),
+        ],
+        center: const LatLngPoint(-23.7, -46.6995),
+        radiusM: 100,
+        status: 'disponivel',
+        ownerType: null,
+        ownerDisplay: null,
+        takeovers: 0,
+      ),
+    ]);
+    final offlineApi = ApiClient(
+      client: MockClient((request) async {
+        if (request.url.path == '/location') {
+          return http.Response('', 204);
+        }
+        return http.Response('{"detail":"fora do ar"}', 500);
+      }),
+    );
+    addTearDown(offlineApi.close);
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
+        create: (_) => AppState(api: offlineApi),
+        child: const MaterialApp(home: MapScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<PolygonLayer>(find.byType(PolygonLayer))
+          .polygons
+          .length,
+      1,
+    );
+    expect(tester.takeException(), isNull);
   });
 }

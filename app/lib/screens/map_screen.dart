@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import '../models.dart';
 import '../services/api_client.dart';
+import '../services/map_cache.dart';
 import '../services/position_refiner.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
@@ -58,7 +59,32 @@ class _MapScreenState extends State<MapScreen> {
       final pendingRuns = state.retryPendingRuns().catchError(
         (Object _) => false,
       );
-      final territories = await api.listTerritories();
+      // Estágio 1: pinta na hora com o cache; sem cache, mantém o spinner.
+      // Fire-and-forget de propósito: leitura de prefs nunca pode segurar
+      // o carregamento (em testes, sem mock, ela nem resolve).
+      unawaited(
+        MapCache.load().then((cached) {
+          if (!mounted || cached == null || cached.isEmpty) return;
+          setState(() {
+            _territories = cached;
+            _loading = false;
+          });
+          _moveToCached(cached);
+        }).catchError((Object _) {}),
+      );
+      // Estágio 2: territórios frescos e GPS em paralelo, cada um
+      // pintando ao chegar — nada espera o outro.
+      // TEMP BISECT
+      //unawaited_begin
+      unawaited(
+        api.listTerritories().then((fresh) async {
+          if (!mounted) return;
+          setState(() => _territories = fresh);
+          try {
+            await MapCache.save(fresh);
+          } catch (_) {}
+        }).catchError((Object _) {}),
+      );
       final pos = await _resolveLocation();
       final wild = await api
           .wildSpawns(
@@ -75,7 +101,6 @@ class _MapScreenState extends State<MapScreen> {
       }
       if (!mounted) return; // RF14/RNF20
       setState(() {
-        _territories = territories;
         _wild = wild;
         _myLocation = pos;
         _loading = false;
@@ -86,8 +111,8 @@ class _MapScreenState extends State<MapScreen> {
         if (!mounted) return;
         if (pos != null) {
           _mapController.move(pos, 16);
-        } else if (territories.isNotEmpty) {
-          final c = territories.first.center;
+        } else if (_territories.isNotEmpty) {
+          final c = _territories.first.center;
           _mapController.move(ll.LatLng(c.lat, c.lng), 16);
         }
       });
@@ -109,6 +134,17 @@ class _MapScreenState extends State<MapScreen> {
         _loading = false;
       });
     }
+  }
+
+  void _moveToCached(List<Territory> cached) {
+    // Câmera imediata no cache; o GPS reposiciona ao chegar.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final c = cached.first.center;
+      try {
+        _mapController.move(ll.LatLng(c.lat, c.lng), 16);
+      } catch (_) {}
+    });
   }
 
   Future<ll.LatLng?> _resolveLocation() async {
