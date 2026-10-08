@@ -359,4 +359,55 @@ void main() {
     expect(find.byIcon(Icons.flag_outlined), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('tapping the territory body opens its sheet', (tester) async {
+    final localApi = ApiClient(
+      client: MockClient((request) async {
+        if (request.url.path == '/territories') {
+          return http.Response(
+            jsonEncode([
+              {
+                'id': 'tocavel',
+                'name': 'Área Tocável',
+                // Quadrado ao redor da posição do usuário (-23.7, -46.7),
+                // com o centro ~78m ao norte: o toque no centro da tela
+                // cai dentro do polígono e longe do marcador.
+                'coordinates': [
+                  {'lat': -23.7005, 'lng': -46.7012},
+                  {'lat': -23.7005, 'lng': -46.6988},
+                  {'lat': -23.6981, 'lng': -46.6988},
+                  {'lat': -23.6981, 'lng': -46.7012},
+                ],
+                'center': {'lat': -23.6993, 'lng': -46.7},
+                'radius_m': 100,
+                'status': 'conquistado',
+                'owner_type': 'user',
+                'owner_display': 'rival',
+                'takeovers': 0,
+              },
+            ]),
+            200,
+          );
+        }
+        if (request.url.path == '/location') {
+          return http.Response('', 204);
+        }
+        return http.Response('{"detail":"Sessão de teste"}', 401);
+      }),
+    );
+    addTearDown(localApi.close);
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
+        create: (_) => AppState(api: localApi),
+        child: const MaterialApp(home: MapScreen()),
+      ),
+    );
+    await pumpMap(tester);
+
+    await tester.tapAt(tester.getCenter(find.byType(FlutterMap)));
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('Área Tocável'), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
 }

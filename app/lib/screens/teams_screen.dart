@@ -57,11 +57,10 @@ class _TeamsScreenState extends State<TeamsScreen> {
   @override
   Widget build(BuildContext context) {
     final team = _myTeam;
-    return Theme(
-      data: buildRunoverTheme(brightness: Brightness.dark),
-      child: Scaffold(
-        backgroundColor: const Color(0xFF12131A),
-        appBar: AppBar(
+    // Sem wrapper de Theme aqui: a tela herda o tema claro/escuro do app
+    // (MaterialApp) para acompanhar a troca em tempo real.
+    return Scaffold(
+      appBar: AppBar(
           title: const Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -94,7 +93,6 @@ class _TeamsScreenState extends State<TeamsScreen> {
                     ? _MyTeamView(team: _myTeam!, onChanged: _load)
                     : _JoinOrCreateView(onChanged: _load, error: _error),
               ),
-      ),
     );
   }
 }
@@ -154,6 +152,7 @@ class _MyTeamView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final photoImage = profileImageProvider(team.photoUrl);
     return CenteredContent(
       maxWidth: 1500,
       child: ListView(
@@ -163,6 +162,8 @@ class _MyTeamView extends StatelessWidget {
             child: CircleAvatar(
               radius: 40,
               backgroundColor: RunoverColors.territory.withValues(alpha: 0.15),
+              foregroundImage: photoImage,
+              onForegroundImageError: photoImage == null ? null : (_, _) {},
               child: Text(
                 team.name.isNotEmpty ? team.name[0].toUpperCase() : '?',
                 style: const TextStyle(
@@ -483,6 +484,8 @@ class _TeamCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = [
       const Color(0xFF3DDBB0),
       const Color(0xFF8B7CFF),
@@ -510,8 +513,8 @@ class _TeamCard extends StatelessWidget {
                 children: [
                   Text(
                     team.name,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: scheme.onSurface,
                       fontSize: 20,
                       fontWeight: FontWeight.w600,
                     ),
@@ -522,7 +525,10 @@ class _TeamCard extends StatelessWidget {
               const SizedBox(height: 6),
               Text(
                 'Criada por @${team.creatorUsername}',
-                style: const TextStyle(color: Color(0xFFB8BCCB), fontSize: 15),
+                style: TextStyle(
+                  color: scheme.onSurfaceVariant,
+                  fontSize: 15,
+                ),
               ),
               const SizedBox(height: 10),
               Wrap(
@@ -530,9 +536,11 @@ class _TeamCard extends StatelessWidget {
                 runSpacing: 6,
                 children: [
                   _teamStat(
+                    context,
                     '${team.memberCount} ${team.memberCount == 1 ? 'membro' : 'membros'}',
                   ),
                   _teamStat(
+                    context,
                     team.territoriesCount == 0
                         ? 'Seja o primeiro'
                         : '${team.territoriesCount} zonas',
@@ -568,11 +576,16 @@ class _TeamCard extends StatelessWidget {
           margin: const EdgeInsets.only(bottom: 12),
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
-            color: const Color(0xFF1C1E2B),
-            border: Border.all(color: const Color(0xFF2A2D3D)),
+            color: scheme.surface,
+            border: Border.all(color: scheme.outlineVariant),
             borderRadius: BorderRadius.circular(20),
-            boxShadow: const [
-              BoxShadow(color: Color(0xFF0A0B10), offset: Offset(0, 5)),
+            boxShadow: [
+              BoxShadow(
+                color: isDark
+                    ? const Color(0xFF0A0B10)
+                    : Colors.black.withValues(alpha: 0.08),
+                offset: const Offset(0, 5),
+              ),
             ],
           ),
           child: compact
@@ -612,7 +625,16 @@ class _TeamCard extends StatelessWidget {
       border: Border.all(color: accent, width: 1.5),
       borderRadius: BorderRadius.circular(24),
     ),
-    child: Icon(Icons.groups_outlined, size: 38, color: accent),
+    clipBehavior: Clip.antiAlias,
+    child: Image(
+      key: Key('team-card-image-${team.id}'),
+      image:
+          profileImageProvider(team.photoUrl) ??
+          AssetImage(teamCardAsset(team.id)),
+      fit: BoxFit.cover,
+      errorBuilder: (context, error, stackTrace) =>
+          Image.asset(teamCardAsset(team.id), fit: BoxFit.cover),
+    ),
   );
 
   Widget _teamTag(String label, Color color) => Container(
@@ -631,21 +653,24 @@ class _TeamCard extends StatelessWidget {
     ),
   );
 
-  Widget _teamStat(String label) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-    decoration: BoxDecoration(
-      color: const Color(0xFF252838),
-      borderRadius: BorderRadius.circular(8),
-    ),
-    child: Text(
-      label,
-      style: const TextStyle(
-        color: Color(0xFFE1E3EC),
-        fontSize: 14,
-        fontWeight: FontWeight.w500,
+  Widget _teamStat(BuildContext context, String label) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
       ),
-    ),
-  );
+      child: Text(
+        label,
+        style: TextStyle(
+          color: scheme.onSurface,
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+    );
+  }
 }
 
 class _JoinOrCreateView extends StatefulWidget {
@@ -729,6 +754,7 @@ class _JoinOrCreateViewState extends State<_JoinOrCreateView> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return CenteredContent(
       maxWidth: 1500,
       child: ListView(
@@ -745,14 +771,14 @@ class _JoinOrCreateViewState extends State<_JoinOrCreateView> {
               hintText: 'Buscar equipe pelo nome',
               prefixIcon: const Icon(Icons.search),
               filled: true,
-              fillColor: const Color(0xFF1C1E2B),
+              fillColor: scheme.surface,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
-                borderSide: const BorderSide(color: Color(0xFF2A2D3D)),
+                borderSide: BorderSide(color: scheme.outlineVariant),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
-                borderSide: const BorderSide(color: Color(0xFF2A2D3D)),
+                borderSide: BorderSide(color: scheme.outlineVariant),
               ),
             ),
           ),
@@ -765,10 +791,10 @@ class _JoinOrCreateViewState extends State<_JoinOrCreateView> {
             ],
           ),
           const SizedBox(height: 24),
-          const Text(
+          Text(
             'EQUIPES DISPONÍVEIS',
             style: TextStyle(
-              color: Color(0xFFB8BCCB),
+              color: scheme.onSurfaceVariant,
               fontSize: 17,
               letterSpacing: .6,
               fontWeight: FontWeight.w600,
@@ -845,52 +871,66 @@ class _JoinOrCreateViewState extends State<_JoinOrCreateView> {
     );
   }
 
-  Widget _createBanner() => Container(
-    padding: const EdgeInsets.all(22),
-    decoration: BoxDecoration(
-      color: const Color(0xFF2A2240),
-      border: Border.all(color: const Color(0xFF8B7CFF), width: 1.5),
-      borderRadius: BorderRadius.circular(22),
-      boxShadow: const [
-        BoxShadow(color: Color(0xFF0A0B10), offset: Offset(0, 6)),
-      ],
-    ),
-    child: LayoutBuilder(
-      builder: (context, constraints) {
-        final icon = Container(
-          width: 78,
-          height: 78,
-          decoration: BoxDecoration(
-            color: const Color(0xFF8B7CFF).withValues(alpha: .15),
-            border: Border.all(color: const Color(0xFF8B7CFF)),
-            borderRadius: BorderRadius.circular(20),
+  Widget _createBanner() {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    const purple = Color(0xFF8B7CFF);
+    return Container(
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF2A2240) : const Color(0xFFE9E6FF),
+        border: Border.all(color: purple, width: 1.5),
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [
+          BoxShadow(
+            color: isDark
+                ? const Color(0xFF0A0B10)
+                : Colors.black.withValues(alpha: 0.08),
+            offset: const Offset(0, 6),
           ),
-          child: const Icon(
-            Icons.groups_outlined,
-            color: Color(0xFFC9C2FF),
-            size: 38,
-          ),
-        );
-        final copy = const Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Corra em grupo, domine mais',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w600,
+        ],
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final icon = Container(
+            width: 78,
+            height: 78,
+            decoration: BoxDecoration(
+              color: purple.withValues(alpha: .15),
+              border: Border.all(color: purple),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Icon(
+              Icons.groups_outlined,
+              color: isDark ? const Color(0xFFC9C2FF) : purple,
+              size: 38,
+            ),
+          );
+          final copy = Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Corra em grupo, domine mais',
+                  style: TextStyle(
+                    color: isDark ? Colors.white : scheme.onSurface,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              ),
-              SizedBox(height: 6),
-              Text(
-                'Você ainda não tem equipe. Crie a sua ou entre em uma para conquistar territórios juntos.',
-                style: TextStyle(color: Color(0xFFD9D4FF), fontSize: 16),
-              ),
-            ],
-          ),
-        );
+                const SizedBox(height: 6),
+                Text(
+                  'Você ainda não tem equipe. Crie a sua ou entre em uma para conquistar territórios juntos.',
+                  style: TextStyle(
+                    color: isDark
+                        ? const Color(0xFFD9D4FF)
+                        : scheme.onSurfaceVariant,
+                    fontSize: 16,
+                  ),
+                ),
+              ],
+            ),
+          );
         final button = FilledButton.icon(
           onPressed: _createTeam,
           icon: const Icon(Icons.add),
@@ -921,34 +961,39 @@ class _JoinOrCreateViewState extends State<_JoinOrCreateView> {
               );
       },
     ),
-  );
+    );
+  }
 
   Widget _filterChip(String value, String label) {
+    final scheme = Theme.of(context).colorScheme;
     final selected = _filter == value;
     return ChoiceChip(
       label: Text(label),
       selected: selected,
       onSelected: (_) => setState(() => _filter = value),
-      selectedColor: const Color(0xFF302018),
-      backgroundColor: const Color(0xFF1C1E2B),
+      selectedColor: scheme.primary.withValues(alpha: 0.16),
+      backgroundColor: scheme.surface,
       labelStyle: TextStyle(
-        color: selected ? const Color(0xFFFFAE8D) : const Color(0xFFB8BCCB),
+        color: selected ? scheme.primary : scheme.onSurfaceVariant,
       ),
       side: BorderSide(
-        color: selected ? const Color(0xFFFF7F4D) : Colors.transparent,
+        color: selected ? scheme.primary : Colors.transparent,
       ),
       shape: const StadiumBorder(),
     );
   }
 
-  Widget _infoCard(String message) => Container(
-    margin: const EdgeInsets.only(bottom: 12),
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: const Color(0xFF1C1E2B),
-      border: Border.all(color: const Color(0xFF2A2D3D)),
-      borderRadius: BorderRadius.circular(14),
-    ),
-    child: Text(message, style: const TextStyle(color: Color(0xFFB8BCCB))),
-  );
+  Widget _infoCard(String message) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        border: Border.all(color: scheme.outlineVariant),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Text(message, style: TextStyle(color: scheme.onSurfaceVariant)),
+    );
+  }
 }

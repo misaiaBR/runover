@@ -2,21 +2,46 @@ name: Docker
 on:
   pull_request:
   push:
+    branches: [main]
+    tags: ['v*']
 permissions:
   contents: read
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4
-      # Valida o Dockerfile que o Render usa no deploy (quebra aqui,
-      # e não só na hora de publicar). Sem push: só prova que compila.
+      - uses: docker/login-action@v3
+        if: github.event_name == 'push'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          # GHCR exige nome minúsculo.
+          images: ghcr.io/misaiabr/runover
+          # latest=false: só a regra explícita da branch padrão gera latest,
+          # para uma tag antiga nunca sequestrar a tag móvel.
+          flavor: latest=false
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,format=short,enable={{is_default_branch}}
+            type=ref,event=tag
+      # Em PR só valida que o Dockerfile compila (sem push).
+      # Em push na main/tag, publica a imagem no GHCR.
       - uses: docker/build-push-action@v7
         with:
           context: .
           file: ./Dockerfile
-          push: false
+          push: ${{ github.event_name == 'push' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
   deploy:
     # Dispara o deploy no Render via Deploy Hook após o merge na main.
     # Configure o segredo RENDER_DEPLOY_HOOK (Render → serviço → Settings).

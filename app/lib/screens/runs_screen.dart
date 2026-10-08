@@ -6,7 +6,6 @@ import 'package:provider/provider.dart';
 import '../services/daily_challenges.dart';
 import '../services/run_store.dart';
 import '../state/app_state.dart';
-import '../theme.dart';
 import '../widgets/centered_content.dart';
 import 'app_footer.dart';
 import 'run_detail_screen.dart';
@@ -352,31 +351,29 @@ class _RunsScreenState extends State<RunsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Sem wrapper de Theme aqui: a tela herda o tema claro/escuro do app.
     return DefaultTabController(
       length: 2,
-      child: Theme(
-        data: buildRunoverTheme(brightness: Brightness.dark),
-        child: Scaffold(
-          appBar: AppBar(
-            title: const Text('Corridas'),
-            actions: [
-              IconButton(
-                tooltip: 'Atualizar',
-                onPressed: _loading ? null : () => _load(),
-                icon: const Icon(Icons.refresh),
-              ),
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Corridas'),
+          actions: [
+            IconButton(
+              tooltip: 'Atualizar',
+              onPressed: _loading ? null : () => _load(),
+              icon: const Icon(Icons.refresh),
+            ),
+          ],
+          bottom: const TabBar(
+            tabs: [
+              Tab(text: 'Histórico'),
+              Tab(text: 'Desafios'),
             ],
-            bottom: const TabBar(
-              tabs: [
-                Tab(text: 'Histórico'),
-                Tab(text: 'Desafios'),
-              ],
-            ),
           ),
-          body: Builder(
-            builder: (context) => TabBarView(
-              children: [_tab(_history(context)), _tab(_challenges(context))],
-            ),
+        ),
+        body: Builder(
+          builder: (context) => TabBarView(
+            children: [_tab(_history(context)), _tab(_challenges(context))],
           ),
         ),
       ),

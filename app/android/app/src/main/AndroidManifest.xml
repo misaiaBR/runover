@@ -11,9 +11,7 @@
         android:label="RUNOVER!"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        android:usesCleartextTraffic="true">
-        <!-- usesCleartextTraffic: build de teste fala com o back-end por HTTP
-             na rede local (http://IP-DO-PC:8000). Em produção isso vira HTTPS. -->
+        android:usesCleartextTraffic="false">
 
         <activity
             android:name=".MainActivity"

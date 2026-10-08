@@ -105,7 +105,7 @@ A branch de produção é `main`. O Blueprint em `render.yaml` descreve um servi
 
 A recuperação de senha por código usa a API SMTP2GO. Configure `SMTP2GO_API_KEY` e `MAIL_FROM_EMAIL` no Render; `MAIL_FROM_NAME` pode permanecer como `RUNOVER!`. Nunca coloque credenciais neste arquivo ou no Git. Sem essas duas variáveis, o endpoint responde como se tivesse enviado, mas nenhum e-mail sai — esse é o sintoma de "não recebi o código". A inicialização registra um aviso no log quando o envio está desconfigurado.
 
-O remetente precisa estar verificado no SMTP2GO. `DATABASE_URL` e `SECRET_KEY` devem ser definidos no painel como variáveis secretas; o Blueprint não cria um banco Render substituto.
+O remetente precisa estar verificado no SMTP2GO. `DATABASE_URL` e `SECRET_KEY` devem ser definidos no painel como variáveis secretas; o Blueprint não cria um banco Render substituto. Para conferir a chave antes de configurar o Render, rode `SMTP2GO_API_KEY=sua-chave python3 tools/check_smtp2go_key.py` (ela só valida `allowed` + acesso a `/email/send`, sem gravar nada).
 
 Após um deploy saudável, `https://runover.onrender.com/` abre o app e `https://runover.onrender.com/health` retorna o status da API. Todo PR compila o Dockerfile no job `docker` para não descobrir quebra só no deploy; na `main`, o job ainda dispara o Deploy Hook do Render se o segredo `RENDER_DEPLOY_HOOK` existir (senão, vale o auto-deploy do Blueprint).
 

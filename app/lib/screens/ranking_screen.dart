@@ -15,14 +15,18 @@ class RankingScreen extends StatefulWidget {
 }
 
 class _RankingScreenState extends State<RankingScreen> {
-  static const _bg = Color(0xFF12131A);
-  static const _panel = Color(0xFF1C1E2B);
-  static const _border = Color(0xFF2A2D3D);
-  static const _muted = Color(0xFFB8BCCB);
+  // Acentos da marca: iguais no claro e no escuro.
   static const _orange = Color(0xFFFF7F4D);
   static const _gold = Color(0xFFFFC93C);
   static const _teal = Color(0xFF3DDBB0);
   static const _purple = Color(0xFF8B7CFF);
+
+  // Superfícies e textos acompanham o brilho do app — nunca fixos.
+  ColorScheme get _scheme => Theme.of(context).colorScheme;
+  bool get _isDark => Theme.of(context).brightness == Brightness.dark;
+  Color get _panel => _scheme.surface;
+  Color get _border => _scheme.outlineVariant;
+  Color get _muted => _scheme.onSurfaceVariant;
 
   String _period = 'week';
   bool _teams = false;
@@ -53,7 +57,6 @@ class _RankingScreenState extends State<RankingScreen> {
   Widget build(BuildContext context) {
     final profile = context.watch<AppState>().profile;
     return Scaffold(
-      backgroundColor: _bg,
       body: SafeArea(
         child: CenteredContent(
           maxWidth: 1500,
@@ -82,14 +85,14 @@ class _RankingScreenState extends State<RankingScreen> {
                         if (snapshot.hasError) {
                           return ListView(
                             physics: const AlwaysScrollableScrollPhysics(),
-                            children: const [
-                              SizedBox(height: 80),
+                            children: [
+                              const SizedBox(height: 80),
                               Icon(
                                 Icons.cloud_off_outlined,
                                 size: 48,
                                 color: _muted,
                               ),
-                              SizedBox(height: 12),
+                              const SizedBox(height: 12),
                               Center(
                                 child: Text(
                                   'Não foi possível carregar o ranking. Arraste para tentar de novo.',
@@ -129,19 +132,19 @@ class _RankingScreenState extends State<RankingScreen> {
       final title = Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Ranking',
             style: TextStyle(
               fontSize: 36,
               height: 1.1,
-              color: Colors.white,
+              color: _scheme.onSurface,
               fontWeight: FontWeight.w600,
             ),
           ),
           const SizedBox(height: 6),
           Text(
             _periodSubtitle,
-            style: const TextStyle(color: _muted, fontSize: 18),
+            style: TextStyle(color: _muted, fontSize: 18),
           ),
         ],
       );
@@ -288,7 +291,7 @@ class _RankingScreenState extends State<RankingScreen> {
                   ? 'Nenhuma equipe pontuou neste período.'
                   : 'Ninguém pontuou neste período. Seja o primeiro!',
               textAlign: TextAlign.center,
-              style: const TextStyle(color: _muted),
+              style: TextStyle(color: _muted),
             ),
           ),
         ],
@@ -370,8 +373,8 @@ class _RankingScreenState extends State<RankingScreen> {
                 _entryName(entry),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: _scheme.onSurface,
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
                 ),
@@ -425,7 +428,7 @@ class _RankingScreenState extends State<RankingScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: isMe ? const Color(0xFF302018) : _panel,
+        color: isMe ? _scheme.primaryContainer : _panel,
         border: Border.all(color: accent, width: isMe ? 1.5 : 1),
         borderRadius: BorderRadius.circular(18),
       ),
@@ -441,7 +444,7 @@ class _RankingScreenState extends State<RankingScreen> {
                 child: Text(
                   '$rank',
                   style: TextStyle(
-                    color: isMe ? const Color(0xFFFFAE8D) : _muted,
+                    color: isMe ? _scheme.onPrimaryContainer : _muted,
                     fontSize: 20,
                   ),
                 ),
@@ -464,8 +467,8 @@ class _RankingScreenState extends State<RankingScreen> {
                       children: [
                         Text(
                           _entryName(entry),
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: _scheme.onSurface,
                             fontSize: 18,
                             fontWeight: FontWeight.w600,
                           ),
@@ -492,7 +495,7 @@ class _RankingScreenState extends State<RankingScreen> {
                     ),
                     Text(
                       '${entry.territoriesCount} territórios',
-                      style: const TextStyle(color: _muted, fontSize: 15),
+                      style: TextStyle(color: _muted, fontSize: 15),
                     ),
                   ],
                 ),
@@ -500,8 +503,8 @@ class _RankingScreenState extends State<RankingScreen> {
               const SizedBox(width: 12),
               Text(
                 '${_formatScore(entry.totalScore)} pts',
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: _scheme.onSurface,
                   fontSize: 20,
                   fontWeight: FontWeight.w500,
                 ),
@@ -533,7 +536,7 @@ class _RankingScreenState extends State<RankingScreen> {
       margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF2A2240),
+        color: _isDark ? const Color(0xFF2A2240) : const Color(0xFFE9E6FF),
         border: Border.all(color: _purple, width: 1.5),
         borderRadius: BorderRadius.circular(20),
       ),
@@ -545,8 +548,8 @@ class _RankingScreenState extends State<RankingScreen> {
             children: [
               Text(
                 'Você está em $placeº',
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: _scheme.onSurface,
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
                 ),
@@ -554,8 +557,8 @@ class _RankingScreenState extends State<RankingScreen> {
               if (next != null)
                 Text(
                   'Faltam $gap pts para o ${place - 1}º',
-                  style: const TextStyle(
-                    color: Color(0xFFC9C2FF),
+                  style: TextStyle(
+                    color: _isDark ? const Color(0xFFC9C2FF) : _muted,
                     fontSize: 15,
                   ),
                 ),
@@ -567,7 +570,9 @@ class _RankingScreenState extends State<RankingScreen> {
             child: LinearProgressIndicator(
               value: progress,
               minHeight: 12,
-              backgroundColor: const Color(0xFF40385B),
+              backgroundColor: _isDark
+                  ? const Color(0xFF40385B)
+                  : _scheme.surfaceContainerHighest,
               valueColor: const AlwaysStoppedAnimation(_teal),
             ),
           ),
@@ -595,9 +600,9 @@ class _RankingScreenState extends State<RankingScreen> {
     );
   }
 
-  Widget _pointsText() => const Text(
+  Widget _pointsText() => Text(
     'Cada território novo vale +50 pts',
-    style: TextStyle(color: Color(0xFFD9D4FF), fontSize: 16),
+    style: TextStyle(color: _muted, fontSize: 16),
   );
 
   Widget _pointsButton() => FilledButton(
@@ -629,7 +634,7 @@ class _RankingScreenState extends State<RankingScreen> {
           ? Text(
               initial,
               style: TextStyle(
-                color: isMe ? const Color(0xFF28140B) : Colors.white,
+                color: isMe ? _scheme.primary : _scheme.onSurface,
                 fontSize: radius * 0.8,
                 fontWeight: FontWeight.w700,
               ),
@@ -671,12 +676,13 @@ class _RankingScreenState extends State<RankingScreen> {
   }
 
   void _showPointsHelp() {
+    final scheme = _scheme;
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: _panel,
       showDragHandle: true,
-      builder: (context) => const Padding(
-        padding: EdgeInsets.fromLTRB(24, 8, 24, 32),
+      builder: (context) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -684,15 +690,15 @@ class _RankingScreenState extends State<RankingScreen> {
             Text(
               'Como ganhar pontos',
               style: TextStyle(
-                color: Colors.white,
+                color: scheme.onSurface,
                 fontSize: 22,
                 fontWeight: FontWeight.w700,
               ),
             ),
-            SizedBox(height: 12),
+            const SizedBox(height: 12),
             Text(
               'Conquiste territórios correndo para somar pontos. Defender e recuperar áreas também altera sua pontuação.',
-              style: TextStyle(color: _muted, fontSize: 16),
+              style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 16),
             ),
           ],
         ),

@@ -89,6 +89,10 @@ void main() {
     expect(find.text('Ranking'), findsOneWidget);
     expect(find.text('Semana'), findsOneWidget);
     expect(find.text('Jogadores'), findsOneWidget);
+    expect(
+      tester.widget<Text>(find.text('Ranking')).style?.color,
+      Theme.of(tester.element(find.text('Ranking'))).colorScheme.onSurface,
+    );
     expect(tester.takeException(), isNull);
   });
 
@@ -99,6 +103,23 @@ void main() {
     expect(find.text('Ranking'), findsOneWidget);
     expect(find.text('Semana'), findsOneWidget);
     expect(find.text('Jogadores'), findsOneWidget);
+    expect(
+      tester.widget<Text>(find.text('Ranking')).style?.color,
+      Theme.of(tester.element(find.text('Ranking'))).colorScheme.onSurface,
+    );
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('ranking title adapts to brightness', (tester) async {
+    Future<Color?> titleColor(Brightness brightness) async {
+      await open(tester, brightness);
+      return tester.widget<Text>(find.text('Ranking')).style?.color;
+    }
+
+    final light = await titleColor(Brightness.light);
+    final dark = await titleColor(Brightness.dark);
+    expect(light, isNotNull);
+    expect(dark, isNotNull);
+    expect(light, isNot(dark));
   });
 }

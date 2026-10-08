@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../models.dart';
 import '../services/api_client.dart';
+import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/centered_content.dart';
@@ -137,6 +138,14 @@ class _TeamHubScreenState extends State<TeamHubScreen> {
                                 backgroundColor: colors.tertiary.withValues(
                                   alpha: 0.15,
                                 ),
+                                foregroundImage:
+                                    team.photoUrl?.isNotEmpty == true
+                                    ? profileImageProvider(team.photoUrl)
+                                    : null,
+                                onForegroundImageError:
+                                    team.photoUrl?.isNotEmpty == true
+                                    ? (_, _) {}
+                                    : null,
                                 child: Text(
                                   team.name.isNotEmpty
                                       ? team.name[0].toUpperCase()
