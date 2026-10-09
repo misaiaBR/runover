@@ -264,6 +264,13 @@ class ApiClient {
         ),
       );
 
+  /// Insígnias: catálogo completo com estado, progresso e data de ganho.
+  /// Consultar já concede o que a regra alcançou (não há resgate).
+  Future<List<Insignia>> getBadges() async =>
+      ((await _request('GET', '/badges')) as List)
+          .map((e) => Insignia.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+
   /// Desativação temporária: a conta some e o login bloqueia, mas nada
   /// é apagado — volta com [reactivate].
   Future<void> deactivateAccount() async {

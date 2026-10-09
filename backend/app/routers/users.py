@@ -25,6 +25,7 @@ from app.models import (
     TerritoryOwnership,
     TeamItem,
     User,
+    UserBadge,
     UserItem,
 )
 from app.schemas import HistoryEntry, ProfileUpdateRequest, UserProfile, UserPublic
@@ -239,6 +240,7 @@ def delete_my_account(
         ClaimReceipt,
         CoinTransaction,
         UserItem,
+        UserBadge,
         ScoreEvent,
         Notification,
         LocationPing,

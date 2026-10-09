@@ -567,3 +567,17 @@ class PurchaseRequest(BaseModel):
 class EquipRequest(BaseModel):
     category: str
     item_id: str | None = None
+
+
+# ---------- Insígnias (as conquistas publicadas no mural) ----------
+
+class Badge(BaseModel):
+    id: str
+    name: str
+    description: str
+    icon: str
+    metric: str  # chave da métrica em app/services/badges.py
+    threshold: float
+    progress: float  # valor atual da métrica, para "3 de 10"
+    earned: bool
+    earned_at: datetime | None = None

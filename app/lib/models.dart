@@ -416,6 +416,48 @@ class Inventory {
   }
 }
 
+/// Insígnia do catálogo de conquistas (via API: GET /badges).
+///
+/// A regra mora no servidor (`backend/app/services/badges.py`): `metric` é a
+/// métrica observada, `threshold` o limiar e `earnedAt` a data do registro.
+class Insignia {
+  final String id;
+  final String name;
+  final String description;
+  final String icon; // run | flag | route | team | level
+  final String metric;
+  final double threshold;
+  final double progress;
+  final bool earned;
+  final DateTime? earnedAt;
+
+  const Insignia({
+    required this.id,
+    required this.name,
+    required this.description,
+    required this.icon,
+    required this.metric,
+    required this.threshold,
+    required this.progress,
+    required this.earned,
+    this.earnedAt,
+  });
+
+  bool get isLevelReward => metric == 'level';
+
+  factory Insignia.fromJson(Map<String, dynamic> j) => Insignia(
+    id: '${j['id']}',
+    name: '${j['name']}',
+    description: '${j['description']}',
+    icon: '${j['icon'] ?? 'verified'}',
+    metric: '${j['metric'] ?? ''}',
+    threshold: (j['threshold'] as num?)?.toDouble() ?? 0,
+    progress: (j['progress'] as num?)?.toDouble() ?? 0,
+    earned: j['earned'] == true,
+    earnedAt: j['earned_at'] == null ? null : DateTime.parse('${j['earned_at']}'),
+  );
+}
+
 class TeamMemberInfo {
   final String username;
   final String? photoUrl;

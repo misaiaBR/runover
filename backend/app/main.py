@@ -16,7 +16,7 @@ from app.legal import privacy_response
 from app.h3cells import cell_for
 from app.models import Territory
 from app.routers import (
-    auth, location, notifications, ranking, shop, teams, territories,
+    auth, badges, location, notifications, ranking, shop, teams, territories,
     users, runs, pass_runover,
 )
 
@@ -112,6 +112,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(users.router)
+app.include_router(badges.router)
 app.include_router(shop.router)
 app.include_router(pass_runover.router)
 app.include_router(teams.router)

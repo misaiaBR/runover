@@ -358,6 +358,22 @@ class UserItem(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
+class UserBadge(Base):
+    """Insígnia já cumprida: guarda quando o servidor registrou o ganho.
+
+    O catálogo (regra e limiar) versiona em `app/services/badges.py`; aqui só
+    existe a linha de quem ganhou, uma vez por insígnia.
+    """
+
+    __tablename__ = "user_badges"
+    __table_args__ = (UniqueConstraint("user_id", "badge_id", name="uq_user_badge"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    badge_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    earned_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
 class TeamItem(Base):
     """Inventário da equipe: itens de escopo "team" comprados com o cofre
     (soma dos pontos dos integrantes). Um por equipe."""

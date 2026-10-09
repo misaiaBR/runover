@@ -11,6 +11,7 @@ import 'package:runover_app/screens/profile_screen.dart';
 import 'package:runover_app/services/api_client.dart';
 import 'package:runover_app/state/app_state.dart';
 import 'package:runover_app/theme.dart';
+import 'package:runover_app/widgets/cosmetics.dart';
 import 'package:runover_app/widgets/profile_activity.dart';
 
 const profileData = {
@@ -52,6 +53,64 @@ const progressData = {
     {'name': 'Primeira conquista', 'earned': false},
   ],
 };
+// GET /badges: o catálogo real de insígnias, com a data do registro.
+const insigniasData = [
+  {
+    'id': 'badge_primeira_corrida',
+    'name': 'Primeira corrida',
+    'description': 'Registre 1 corrida.',
+    'icon': 'run',
+    'metric': 'runs',
+    'threshold': 1,
+    'progress': 12,
+    'earned': true,
+    'earned_at': '2026-03-07T10:00:00Z',
+  },
+  {
+    'id': 'badge_cinco_km',
+    'name': '5 km em um laço',
+    'description': 'Corra 5 km em uma única corrida.',
+    'icon': 'route',
+    'metric': 'longest_km',
+    'threshold': 5,
+    'progress': 10.4,
+    'earned': true,
+    'earned_at': '2026-04-02T09:30:00Z',
+  },
+  {
+    'id': 'badge_meia_maratona',
+    'name': 'Meia maratona',
+    'description': 'Corra 21 km em uma única corrida.',
+    'icon': 'route',
+    'metric': 'longest_km',
+    'threshold': 21,
+    'progress': 10.4,
+    'earned': false,
+    'earned_at': null,
+  },
+  {
+    'id': 'badge_nivel_3',
+    'name': 'Selo de bronze',
+    'description': 'Alcance o nível 3.',
+    'icon': 'level',
+    'metric': 'level',
+    'threshold': 3,
+    'progress': 2,
+    'earned': false,
+    'earned_at': null,
+  },
+  {
+    'id': 'badge_nivel_5',
+    'name': 'Selo de prata',
+    'description': 'Alcance o nível 5.',
+    'icon': 'level',
+    'metric': 'level',
+    'threshold': 5,
+    'progress': 2,
+    'earned': false,
+    'earned_at': null,
+  },
+];
 
 void main() {
   Future<void> open(
@@ -75,6 +134,9 @@ void main() {
         }
         if (request.url.path == '/users/me') {
           return http.Response(jsonEncode(profileData), 200);
+        }
+        if (request.url.path == '/badges') {
+          return http.Response(jsonEncode(insigniasData), 200);
         }
         return http.Response('{}', 404);
       }),
@@ -308,7 +370,8 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('tapping avatar offers upload and remove', (tester) async {    tester.view.physicalSize = const Size(390, 844);
+  testWidgets('tapping avatar offers upload and remove', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -319,8 +382,7 @@ void main() {
           return http.Response(jsonEncode(progressData), 200);
         }
         if (request.method == 'PATCH' && request.url.path == '/users/me') {
-          patched =
-              jsonDecode(request.body) as Map<String, dynamic>;
+          patched = jsonDecode(request.body) as Map<String, dynamic>;
           return http.Response(
             jsonEncode({...profileData, 'photo_url': null}),
             200,
@@ -383,6 +445,9 @@ void main() {
         if (request.url.path == '/runs/progress') {
           return http.Response(jsonEncode(progressData), 200);
         }
+        if (request.url.path == '/badges') {
+          return http.Response(jsonEncode(insigniasData), 200);
+        }
         return http.Response('{}', 404);
       }),
     );
@@ -405,24 +470,39 @@ void main() {
   testWidgets(
     'identity card shows pronouns, emoticons, mural and member since',
     (tester) async {
-      await openIdentity(tester, overrides: {
-        'pronouns': 'ele/dele',
-        'equipped_emoticons': ['🏆', '⚡'],
-        'created_at': '2020-06-06T12:00:00Z',
-      });
+      await openIdentity(
+        tester,
+        overrides: {
+          'pronouns': 'ele/dele',
+          'equipped_emoticons': ['🏆', '⚡'],
+          'created_at': '2020-06-06T12:00:00Z',
+        },
+      );
       expect(find.text('ele/dele'), findsOneWidget);
       expect(find.text('Adicionar pronomes'), findsNothing);
       expect(find.text('🏆'), findsOneWidget);
       expect(find.text('⚡'), findsOneWidget);
       expect(find.text('Membro desde 6 de jun. de 2020'), findsOneWidget);
-      expect(find.text('Mural · 1'), findsOneWidget);
-      // Badge aparece na atividade e no mural de conquistas.
-      expect(find.text('Primeira corrida'), findsNWidgets(2));
+      // O mural publica as insígnias ganhas (GET /badges), com a data do
+      // registro; "Primeira corrida" só aparece uma vez: no card de atividade,
+      // porque no mural o chip carrega a data no rótulo.
+      expect(find.text('Mural · 2'), findsOneWidget);
+      expect(
+        find.text('Primeira corrida · 7 de mar. de 2026'),
+        findsOneWidget,
+      );
+      expect(find.text('Primeira corrida'), findsOneWidget);
       expect(find.text('Editar perfil'), findsOneWidget);
       expect(find.text('Loja de cosméticos'), findsOneWidget);
       expect(find.text('Insígnias'), findsOneWidget);
-      expect(find.text('Mudar de conta'), findsOneWidget);
-      expect(find.text('Copiar ID do usuário'), findsOneWidget);
+      // Troca de conta e cópia do ID bruto do banco saíram da tela: o logout
+      // vive no menu superior e o identificador interno não é dado de exibição.
+      expect(find.text('Mudar de conta'), findsNothing);
+      expect(find.text('Copiar ID do usuário'), findsNothing);
+      // O bloco de identidade é centrado: avatar e nome partilham o mesmo eixo.
+      final avatar = tester.getRect(find.byType(FramedAvatar));
+      final name = tester.getRect(find.text('Marina Oliveira'));
+      expect((avatar.center.dx - name.center.dx).abs(), lessThan(2));
       expect(tester.takeException(), isNull);
     },
   );
@@ -437,6 +517,31 @@ void main() {
     await tester.tap(find.byKey(const Key('settings-tab-conta')));
     await tester.pumpAndSettle();
     expect(find.widgetWithText(TextField, 'Nome'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('level rewards are a static showcase and Insígnias leaves the '
+      'score history', (tester) async {
+    await openIdentity(tester);
+    await tester.scrollUntilVisible(find.text('Recompensas de nível'), 300);
+    expect(find.text('Recompensas de nível'), findsOneWidget);
+    expect(
+      find.text('Selos concedidos pelo nível da conta, sem resgate.'),
+      findsOneWidget,
+    );
+    // Nível 2 na conta de teste: os selos de nível 3 e 5 aparecem bloqueados.
+    expect(find.text('Selo de bronze'), findsOneWidget);
+    expect(find.text('Selo de prata'), findsOneWidget);
+    expect(find.textContaining('Resgatar'), findsNothing);
+
+    await tester.scrollUntilVisible(find.text('Insígnias'), 300);
+    await tester.tap(find.text('Insígnias'));
+    await tester.pumpAndSettle();
+    expect(find.text('Ganhas · 2 de 5'), findsOneWidget);
+    // Antes este item abria o histórico de pontos; as insígnias têm tela própria.
+    expect(find.text('Histórico'), findsNothing);
+    await tester.scrollUntilVisible(find.text('Meia maratona'), 200);
+    expect(find.text('Bloqueada · 10,4 de 21'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }
