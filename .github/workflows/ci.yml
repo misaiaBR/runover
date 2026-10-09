@@ -47,12 +47,14 @@ jobs:
             -e POSTGRES_DB=runover_test \
             -p 55432:5432 postgres:16
           for i in $(seq 1 30); do
-            if docker exec runover-postgres pg_isready -U postgres -d runover_test > /dev/null 2>&1; then
+            # -h força o TCP: sem ele o pg_isready usa o socket local, que o
+            # Postgres 16 abre antes de escutar a porta publicada aos testes.
+            if docker exec runover-postgres pg_isready -h 127.0.0.1 -U postgres -d runover_test > /dev/null 2>&1; then
               break
             fi
             sleep 2
           done
-          docker exec runover-postgres pg_isready -U postgres -d runover_test
+          docker exec runover-postgres pg_isready -h 127.0.0.1 -U postgres -d runover_test
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12.10'
