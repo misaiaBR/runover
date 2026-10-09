@@ -22,6 +22,12 @@ jobs:
     services:
       postgres:
         image: postgres:16
+        # Os runners compartilham IP e o pull anônimo da Docker Hub estoura em
+        # 429. Sem os secrets, usuário/senha ficam vazios e o runner mantém o
+        # pull anônimo.
+        credentials:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
         env:
           POSTGRES_HOST_AUTH_METHOD: trust
           POSTGRES_DB: runover_test
