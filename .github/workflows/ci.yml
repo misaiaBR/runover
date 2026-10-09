@@ -19,27 +19,40 @@ jobs:
           GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
   backend:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16
-        # Os runners compartilham IP e o pull anônimo da Docker Hub estoura em
-        # 429. Sem os secrets, usuário/senha ficam vazios e o runner mantém o
-        # pull anônimo.
-        credentials:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-        env:
-          POSTGRES_HOST_AUTH_METHOD: trust
-          POSTGRES_DB: runover_test
-        ports:
-          - 55432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
     steps:
       - uses: actions/checkout@v7
+      - name: Checar credenciais da Docker Hub
+        id: dockerhub
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          if [ -n "$DOCKERHUB_USERNAME" ] && [ -n "$DOCKERHUB_TOKEN" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+      # O service container puxa a imagem antes do primeiro step e o runner
+      # recusa expressão em services.*.credentials, então o login acontece aqui
+      # e o Postgres sobe por docker run. Sem os secrets, segue anônimo.
+      - uses: docker/login-action@v3
+        if: steps.dockerhub.outputs.available == 'true'
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Subir o Postgres
+        run: |
+          docker run -d --name runover-postgres \
+            -e POSTGRES_HOST_AUTH_METHOD=trust \
+            -e POSTGRES_DB=runover_test \
+            -p 55432:5432 postgres:16
+          for i in $(seq 1 30); do
+            if docker exec runover-postgres pg_isready -U postgres -d runover_test > /dev/null 2>&1; then
+              break
+            fi
+            sleep 2
+          done
+          docker exec runover-postgres pg_isready -U postgres -d runover_test
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12.10'
@@ -51,6 +64,9 @@ jobs:
       - run: PYTHONPATH=backend python -m unittest discover -s backend/tests -v
         env:
           RUNOVER_TEST_POSTGRES_URL: postgresql+psycopg://postgres@127.0.0.1:55432/runover_test
+      - name: Derrubar o Postgres
+        if: always()
+        run: docker rm -f runover-postgres
   postman:
     runs-on: ubuntu-latest
     steps:
