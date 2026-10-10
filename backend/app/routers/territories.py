@@ -44,6 +44,7 @@ from app.services.scoring import (
 )
 from app.services.spawns import (
     WELCOME_RADIUS_M,
+    cell_id,
     welcome_spawn_for,
     wild_spawns_for,
     wild_spawns_in_bounds,
@@ -210,8 +211,14 @@ def wild_territories(
     if not current_owner_territory_ids(db, current_user.id):
         nearest = min((s["distance_m"] for s in live), default=None)
         if nearest is None or nearest > WELCOME_RADIUS_M:
-            welcome = welcome_spawn_for(current_user.id, lat, lng, now)
-            if welcome["key"] not in claimed:
+            welcome = welcome_spawn_for(cell_id(lat, lng), now)
+            welcome["distance_m"] = haversine_m(
+                lat, lng, welcome["lat"], welcome["lng"]
+            )
+            if (
+                welcome["key"] not in claimed
+                and welcome["distance_m"] <= radius_km * 1000
+            ):
                 live.append(welcome)
     return [
         WildSpawn(
