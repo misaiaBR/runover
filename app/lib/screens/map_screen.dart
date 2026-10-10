@@ -14,17 +14,26 @@ import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/crown_icon.dart';
 import '../widgets/location_gate.dart';
+import '../widgets/play_mode_sheet.dart';
 import '../widgets/territory_style.dart';
 import 'notifications_screen.dart';
 import 'tracking_screen.dart';
 
 /// RF06/RF07 — mapa interativo com os territórios e seus donos.
+///
+/// Quando [focus] vem do "Como quer jogar?", o mapa se comporta conforme a
+/// mecânica: dica contextual no topo e camadas fora do foco apagadas.
 class MapScreen extends StatefulWidget {
-  const MapScreen({super.key});
+  const MapScreen({super.key, this.focus});
+
+  final PlayMode? focus;
 
   @override
   State<MapScreen> createState() => _MapScreenState();
 }
+
+/// Camadas do mapa que o foco da mecânica acende ou apaga.
+enum _LayerKind { free, owned, wild }
 
 class _MapScreenState extends State<MapScreen>
     with SingleTickerProviderStateMixin {
@@ -40,12 +49,14 @@ class _MapScreenState extends State<MapScreen>
   String? _locationError;
   String? _error;
   bool _needsLocationGate = false;
+  PlayMode? _focus;
 
   static final _defaultCenter = ll.LatLng(-23.6489, -46.8523); // Embu das Artes
 
   @override
   void initState() {
     super.initState();
+    _focus = widget.focus;
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1200),
@@ -218,6 +229,26 @@ class _MapScreenState extends State<MapScreen>
   Color _statusColor(Territory t, String? myUsername, String? myTeamName) =>
       territoryColor(t, myUsername: myUsername, myTeamName: myTeamName);
 
+  /// Opacidade da camada conforme a mecânica escolhida: só o foco fica
+  /// aceso, o resto apaga para 25%.
+  double _layerOpacity(_LayerKind kind) {
+    return switch ((_focus, kind)) {
+      (null, _) => 1,
+      (PlayMode.huntWild, _LayerKind.wild) => 1,
+      (PlayMode.challenge, _LayerKind.owned) => 1,
+      _ => 0.25,
+    };
+  }
+
+  /// Dica contextual do modo, dispensável.
+  String? get _focusHint => switch (_focus) {
+    PlayMode.huntWild => 'Caçando selvagem — toque num marcador colorido '
+        'para ver o alvo.',
+    PlayMode.challenge => 'Desafio — toque num território com coroa para '
+        'ver a marca do dono.',
+    _ => null,
+  };
+
   /// Toque no mapa abre a ficha. Um GestureDetector dentro do marcador perde a
   /// arena de gestos para o próprio flutter_map, então é o mapa que decide:
   /// primeiro os marcadores (o toque no ícone é escolha explícita daquele
@@ -302,6 +333,37 @@ class _MapScreenState extends State<MapScreen>
   @override
   Widget build(BuildContext context) {
     final profile = context.watch<AppState>().profile;
+    Polygon polygonFor(Territory t) {
+      final color = _statusColor(t, profile?.username, profile?.teamName);
+      return Polygon(
+        points: t.coordinates.map((p) => ll.LatLng(p.lat, p.lng)).toList(),
+        color: color.withValues(alpha: 0.12),
+        borderColor: color,
+        borderStrokeWidth: 3,
+      );
+    }
+
+    Marker markerFor(
+      Territory t, {
+      required Color color,
+      required String label,
+      required VoidCallback onTap,
+      required Widget child,
+    }) {
+      return Marker(
+        point: ll.LatLng(t.center.lat, t.center.lng),
+        width: 48,
+        height: 48,
+        child: _PulsingMarker(
+          animation: _pulseController,
+          color: color,
+          label: label,
+          onTap: onTap,
+          child: child,
+        ),
+      );
+    }
+
     final heatCircles = [
       for (final t in _territories)
         if (disputeHeat(t, _territories) case final heat when heat > 0)
@@ -354,26 +416,23 @@ class _MapScreenState extends State<MapScreen>
                     ),
                     if (heatCircles.isNotEmpty)
                       CircleLayer(circles: heatCircles),
-                    PolygonLayer(
-                      polygons: [
-                        for (final t in _territories)
-                          Polygon(
-                            points: t.coordinates
-                                .map((p) => ll.LatLng(p.lat, p.lng))
-                                .toList(),
-                            color: _statusColor(
-                              t,
-                              profile?.username,
-                              profile?.teamName,
-                            ).withValues(alpha: 0.12),
-                            borderColor: _statusColor(
-                              t,
-                              profile?.username,
-                              profile?.teamName,
-                            ),
-                            borderStrokeWidth: 3,
-                          ),
-                      ],
+                    Opacity(
+                      opacity: _layerOpacity(_LayerKind.free),
+                      child: PolygonLayer(
+                        polygons: [
+                          for (final t in _territories)
+                            if (t.isFree) polygonFor(t),
+                        ],
+                      ),
+                    ),
+                    Opacity(
+                      opacity: _layerOpacity(_LayerKind.owned),
+                      child: PolygonLayer(
+                        polygons: [
+                          for (final t in _territories)
+                            if (!t.isFree) polygonFor(t),
+                        ],
+                      ),
                     ),
                     if (_myLocation != null && _locationAccuracy != null)
                       CircleLayer(
@@ -388,52 +447,80 @@ class _MapScreenState extends State<MapScreen>
                           ),
                         ],
                       ),
+                    Opacity(
+                      opacity: _layerOpacity(_LayerKind.free),
+                      child: MarkerLayer(
+                        markers: [
+                          for (final t in _territories)
+                            if (t.isFree)
+                              markerFor(
+                                t,
+                                color: _statusColor(
+                                  t,
+                                  profile?.username,
+                                  profile?.teamName,
+                                ),
+                                label:
+                                    'Território disponível. Toque para ver detalhes.',
+                                // O toque no mapa é quem abre a ficha; a ação
+                                // de acessibilidade mantém o mesmo caminho por
+                                // leitor de tela.
+                                onTap: () => _openDetail(t),
+                                child: const _FreeMarker(),
+                              ),
+                        ],
+                      ),
+                    ),
+                    Opacity(
+                      opacity: _layerOpacity(_LayerKind.owned),
+                      child: MarkerLayer(
+                        markers: [
+                          for (final t in _territories)
+                            if (!t.isFree)
+                              markerFor(
+                                t,
+                                color: _statusColor(
+                                  t,
+                                  profile?.username,
+                                  profile?.teamName,
+                                ),
+                                label:
+                                    'Território de ${t.ownerDisplay}. Toque para ver detalhes.',
+                                onTap: () => _openDetail(t),
+                                child: CrownIcon(
+                                  color: _statusColor(
+                                    t,
+                                    profile?.username,
+                                    profile?.teamName,
+                                  ),
+                                ),
+                              ),
+                        ],
+                      ),
+                    ),
+                    Opacity(
+                      opacity: _layerOpacity(_LayerKind.wild),
+                      child: MarkerLayer(
+                        markers: [
+                          for (final w in _wild)
+                            Marker(
+                              point: ll.LatLng(w.center.lat, w.center.lng),
+                              width: 48,
+                              height: 48,
+                              child: _PulsingMarker(
+                                animation: _pulseController,
+                                color: _wildColor(w.rarity),
+                                label:
+                                    'Território selvagem ${w.rarity}. Toque para ver detalhes.',
+                                onTap: () => _openWildDetail(w),
+                                child: _WildIcon(rarity: w.rarity),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
                     MarkerLayer(
                       markers: [
-                        for (final t in _territories)
-                          Marker(
-                            point: ll.LatLng(t.center.lat, t.center.lng),
-                            width: 48,
-                            height: 48,
-                            child: _PulsingMarker(
-                              animation: _pulseController,
-                              color: _statusColor(
-                                t,
-                                profile?.username,
-                                profile?.teamName,
-                              ),
-                              label: t.isFree
-                                  ? 'Território disponível. Toque para ver detalhes.'
-                                  : 'Território de ${t.ownerDisplay}. Toque para ver detalhes.',
-                              // O toque no mapa é quem abre a ficha; a ação de
-                              // acessibilidade mantém o mesmo caminho por
-                              // leitor de tela.
-                              onTap: () => _openDetail(t),
-                              child: t.isFree
-                                  ? const _FreeMarker()
-                                  : CrownIcon(
-                                      color: _statusColor(
-                                        t,
-                                        profile?.username,
-                                        profile?.teamName,
-                                      ),
-                                    ),
-                            ),
-                          ),
-                        for (final w in _wild)
-                          Marker(
-                            point: ll.LatLng(w.center.lat, w.center.lng),
-                            width: 48,
-                            height: 48,
-                            child: _PulsingMarker(
-                              animation: _pulseController,
-                              color: _wildColor(w.rarity),
-                              label:
-                                  'Território selvagem ${w.rarity}. Toque para ver detalhes.',
-                              onTap: () => _openWildDetail(w),
-                              child: _WildIcon(rarity: w.rarity),
-                            ),
-                          ),
                         if (_myLocation != null)
                           Marker(
                             point: _myLocation!,
@@ -454,6 +541,30 @@ class _MapScreenState extends State<MapScreen>
                   ],
                 ),
                 const Positioned(left: 12, bottom: 24, child: _HeatLegend()),
+                if (_focusHint case final hint?)
+                  Positioned(
+                    top: 84,
+                    left: 12,
+                    right: 12,
+                    child: SafeArea(
+                      child: Card(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
+                          child: Row(
+                            children: [
+                              Expanded(child: Text(hint)),
+                              IconButton(
+                                tooltip: 'Dispensar dica',
+                                onPressed: () =>
+                                    setState(() => _focus = null),
+                                icon: const Icon(Icons.close),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 if (_needsLocationGate && _myLocation == null)
                   Positioned.fill(
                     child: Center(

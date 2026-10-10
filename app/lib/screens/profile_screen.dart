@@ -5,15 +5,19 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../models.dart';
+import '../format.dart';
 import '../services/api_client.dart';
 import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/cosmetics.dart';
 import '../widgets/insignia.dart';
+import '../widgets/league_emblem.dart';
 import '../widgets/level_badge.dart';
+import '../widgets/presence.dart';
 import 'badges_screen.dart';
-import 'pass_trail_screen.dart';
+import 'leagues_screen.dart';
+import 'season_pass_screen.dart';
 import 'app_footer.dart';
 import 'terms_screen.dart';
 import 'edit_profile_screen.dart';
@@ -52,14 +56,43 @@ String _memberSinceLabel(DateTime date) {
   return '${date.day} de ${months[date.month - 1]} de ${date.year}';
 }
 
-/// As insígnias também são opcionais no perfil: sem elas o mural e a vitrine
-/// de nível ficam vazios, mas a conta continua legível.
+/// As insígnias também são opcionais no perfil: sem elas o mural fica vazio,
+/// mas a conta continua legível.
 Future<List<Insignia>> _badgesOrEmpty(ApiClient api) async {
   try {
     return await api.getBadges();
   } catch (_) {
     return const <Insignia>[];
   }
+}
+
+/// Ligas são opcionais no perfil: sem o endpoint o painel de evolução segue
+/// com nível e ranking, só sem o card de liga.
+Future<LeaguesResponse?> _leaguesOrNull(ApiClient api) async {
+  try {
+    return await api.getLeagues();
+  } catch (_) {
+    return null;
+  }
+}
+
+/// O passe também é opcional aqui: o atalho mostra o número de tiers liberados
+/// quando o servidor responde e segue sem contagem quando não responde.
+Future<Map<String, dynamic>?> _passOrNull(ApiClient api) async {
+  try {
+    return await api.getPassRunover();
+  } catch (_) {
+    return null;
+  }
+}
+
+/// Contagem de um atalho do perfil, no singular certo.
+/// Sem dado do servidor devolve null: o card fica sem número em vez de
+/// inventar um zero que o corredor não tem.
+String? _shortcutCount(Object? value, String singular, String plural) {
+  if (value is! num || !value.isFinite) return null;
+  final count = value.toInt();
+  return '$count ${count == 1 ? singular : plural}';
 }
 
 class ProfileScreen extends StatefulWidget {
@@ -81,7 +114,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<Map<String, dynamic>>? _progress;
   Future<List<ShopItem>>? _catalog;
   Future<List<Insignia>>? _badges;
+  Future<LeaguesResponse?>? _leagues;
+  Future<Map<String, dynamic>?>? _pass;
   bool _photoBusy = false;
+  bool _presenceBusy = false;
 
   @override
   void didChangeDependencies() {
@@ -91,6 +127,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _progress ??= state.api.getProgress();
       _catalog ??= _catalogOrEmpty(state.api);
       _badges ??= _badgesOrEmpty(state.api);
+      _leagues ??= _leaguesOrNull(state.api);
+      _pass ??= _passOrNull(state.api);
     }
   }
 
@@ -99,10 +137,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final progressRequest = state.api.getProgress();
     final catalogRequest = _catalogOrEmpty(state.api);
     final badgesRequest = _badgesOrEmpty(state.api);
+    final leaguesRequest = _leaguesOrNull(state.api);
+    final passRequest = _passOrNull(state.api);
     setState(() {
       _progress = progressRequest;
       _catalog = catalogRequest;
       _badges = badgesRequest;
+      _leagues = leaguesRequest;
+      _pass = passRequest;
     });
     try {
       await Future.wait([
@@ -110,6 +152,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         progressRequest,
         catalogRequest,
         badgesRequest,
+        leaguesRequest,
+        passRequest,
       ]);
     } catch (_) {
       if (mounted) {
@@ -141,6 +185,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final next = _badgesOrEmpty(context.read<AppState>().api);
     setState(() {
       _badges = next;
+    });
+  }
+
+  Future<void> _openLeagues() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const LeaguesScreen()));
+    if (!mounted) return;
+    final next = _leaguesOrNull(context.read<AppState>().api);
+    setState(() {
+      _leagues = next;
+    });
+  }
+
+  /// O tier liberado avança com os pontos da temporada, então a contagem do
+  /// atalho é recarregada quando o passe fecha.
+  Future<void> _openPass() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const SeasonPassScreen()));
+    if (!mounted) return;
+    final next = _passOrNull(context.read<AppState>().api);
+    setState(() {
+      _pass = next;
     });
   }
 
@@ -181,6 +249,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _photoBusy = false);
+    }
+  }
+
+  /// O pill de presença fica só no perfil. Escolher um estado grava a chave no
+  /// servidor e recarrega o perfil, que é de onde vêm o ponto verde e o rótulo.
+  Future<void> _choosePresence() async {
+    if (_presenceBusy) return;
+    final app = context.read<AppState>();
+    final current = app.profile;
+    if (current == null) return;
+    final key = await showPresencePicker(context, current.presence);
+    if (key == null || key == current.presence || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _presenceBusy = true);
+    try {
+      await app.api.setPresence(key);
+      await app.refreshProfile();
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _presenceBusy = false);
     }
   }
 
@@ -373,19 +462,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                         onTap: _photoBusy
                                             ? null
                                             : _showPhotoOptions,
-                                        child: FramedAvatar(
-                                          radius: 40,
-                                          image: profileAvatarImage(
-                                            profile.photoUrl,
-                                            avatarItem,
-                                            seed: profile.username,
-                                          ),
-                                          fallbackLetter:
-                                              profile.username.isEmpty
-                                              ? '?'
-                                              : profile.username[0],
-                                          frame: frame,
-                                          avatarItem: avatarItem,
+                                        child: Stack(
+                                          clipBehavior: Clip.none,
+                                          children: [
+                                            FramedAvatar(
+                                              radius: 40,
+                                              image: profileAvatarImage(
+                                                profile.photoUrl,
+                                                avatarItem,
+                                                seed: profile.username,
+                                              ),
+                                              fallbackLetter:
+                                                  profile.username.isEmpty
+                                                  ? '?'
+                                                  : profile.username[0],
+                                              frame: frame,
+                                              avatarItem: avatarItem,
+                                            ),
+                                            // O ponto verde é o sinal vivo que o
+                                            // servidor calcula (batimento + GPS),
+                                            // não o estado escolhido no pill.
+                                            Positioned(
+                                              right: 2,
+                                              bottom: 2,
+                                              child: PresenceDot(
+                                                visible: profile.online,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
                                     ),
@@ -461,6 +565,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       ),
                                     ),
                                 ],
+                              ),
+                              const SizedBox(height: 10),
+                              // O pill de presença fica no cartão de identidade,
+                              // e não no rodapé: tocar aqui abre os quatro estados.
+                              PresencePill(
+                                state: presenceOf(profile.presence),
+                                onTap: _presenceBusy ? () {} : _choosePresence,
                               ),
                               if (profile.equippedEmoticons.isNotEmpty) ...[
                                 const SizedBox(height: 8),
@@ -610,17 +721,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ],
                   ),
                   const SizedBox(height: 20),
-                  _LevelRewards(badges: _badges),
+                  _LeagueCard(leagues: _leagues, onOpen: _openLeagues),
                 ],
               ),
             ),
-            const SizedBox(height: 16),
-            _MuralCard(badges: _badges, onOpenAll: _openBadges),
           ],
         );
       },
     );
-    final activity = Column(
+    // Coluna do meio: a semana em curso e o mural, o que o corredor fez e o
+    // que ele tem para mostrar.
+    final week = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         FutureBuilder<Map<String, dynamic>>(
@@ -662,39 +773,65 @@ class _ProfileScreenState extends State<ProfileScreen> {
           },
         ),
         const SizedBox(height: 16),
-        ProfileCard(
-          child: Column(
-            children: [
-              _profileLink(
-                Icons.directions_run,
-                'Minhas corridas',
-                'Veja seus percursos e atividades',
-                () => Navigator.of(
-                  context,
-                ).push(MaterialPageRoute(builder: (_) => const RunsScreen())),
+        _MuralCard(badges: _badges, onOpenAll: _openBadges),
+      ],
+    );
+    // Última coluna: um card por destino, cada um com a contagem que o
+    // servidor tem daquele corredor hoje.
+    final shortcuts = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        FutureBuilder<Map<String, dynamic>>(
+          future: _progress,
+          builder: (context, snapshot) {
+            return _ShortcutCard(
+              icon: Icons.directions_run,
+              title: 'Minhas corridas',
+              subtitle: 'Veja seus percursos e atividades',
+              counter: _shortcutCount(
+                snapshot.data?['runs_count'],
+                'atividade',
+                'atividades',
               ),
-              const Divider(height: 24),
-              _profileLink(
-                Icons.emoji_events_outlined,
-                'Histórico de conquistas',
-                'Acompanhe seus territórios e pontos',
-                () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const HistoryScreen()),
-                ),
-              ),
-              const Divider(height: 24),
-              _profileLink(
-                Icons.workspace_premium_outlined,
-                'Pass Runover',
-                'Temporada e a trilha de XP',
-                () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const PassTrailScreen()),
-                ),
-              ),
-            ],
-          ),
+              onTap: () => Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const RunsScreen())),
+            );
+          },
         ),
         const SizedBox(height: 12),
+        _ShortcutCard(
+          icon: Icons.emoji_events_outlined,
+          title: 'Histórico de conquistas',
+          subtitle: 'Acompanhe seus territórios e pontos',
+          counter: _shortcutCount(
+            profile.territoriesCount,
+            'território',
+            'territórios',
+          ),
+          onTap: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const HistoryScreen())),
+        ),
+        const SizedBox(height: 12),
+        FutureBuilder<Map<String, dynamic>?>(
+          future: _pass,
+          builder: (context, snapshot) {
+            return _ShortcutCard(
+              icon: Icons.workspace_premium_outlined,
+              title: 'Passe de Temporada',
+              subtitle: 'Temporada e a trilha de XP',
+              // Sem o /pass respondendo o card fica sem número, não com zero.
+              counter: _shortcutCount(
+                snapshot.data?['unlocked_tier'],
+                'tier liberado',
+                'tiers liberados',
+              ),
+              onTap: _openPass,
+            );
+          },
+        ),
+        const SizedBox(height: 4),
         TextButton(
           onPressed: () => Navigator.of(
             context,
@@ -741,28 +878,57 @@ class _ProfileScreenState extends State<ProfileScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
           child: Center(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 1080),
+              constraints: const BoxConstraints(maxWidth: 1180),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   LayoutBuilder(
                     builder: (context, constraints) {
-                      if (constraints.maxWidth < 760) {
+                      final width = constraints.maxWidth;
+                      if (width < 760) {
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             identity,
                             const SizedBox(height: 20),
-                            activity,
+                            week,
+                            const SizedBox(height: 20),
+                            shortcuts,
                           ],
                         );
                       }
+                      // Quem é você e para onde vai fica na primeira coluna,
+                      // com largura fixa: é a única que não cresce.
+                      final about = SizedBox(width: 340, child: identity);
+                      if (width < 1080) {
+                        return Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            about,
+                            const SizedBox(width: 24),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  week,
+                                  const SizedBox(height: 20),
+                                  shortcuts,
+                                ],
+                              ),
+                            ),
+                          ],
+                        );
+                      }
+                      // Três colunas: identidade + evolução | semana + mural |
+                      // atalhos.
                       return Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          SizedBox(width: 320, child: identity),
+                          about,
                           const SizedBox(width: 24),
-                          Expanded(child: activity),
+                          Expanded(child: week),
+                          const SizedBox(width: 24),
+                          SizedBox(width: 300, child: shortcuts),
                         ],
                       );
                     },
@@ -777,37 +943,113 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
+}
 
-  Widget _profileLink(
-    IconData icon,
-    String title,
-    String subtitle,
-    VoidCallback onTap,
-  ) {
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: Icon(icon, color: RunoverColors.route),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-      subtitle: Text(subtitle),
-      trailing: const Icon(Icons.chevron_right),
-      onTap: onTap,
+/// Atalho da última coluna do perfil: um card por destino, com o ícone, o que
+/// ele abre e a contagem do servidor. Sem contagem (dado indisponível) o card
+/// segue legível e só perde o número.
+class _ShortcutCard extends StatelessWidget {
+  const _ShortcutCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+    this.counter,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final String? counter;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Card(
+      margin: EdgeInsets.zero,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: RunoverColors.route.withValues(alpha: .10),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: RunoverColors.route, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                    // A contagem vai embaixo do texto, e não na ponta do card:
+                    // ao lado do título ela o espreme na coluna estreita.
+                    if (counter != null) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        counter!,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: RunoverColors.territory,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, size: 18),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
 
-/// Mural do perfil: as conquistas publicadas como insígnias já ganhas.
+/// Mural do perfil: as insígnias em hexágonos, as ganhas na frente. O que
+/// falta para completar a fila aparece bloqueado, com o progresso da regra.
 class _MuralCard extends StatelessWidget {
   const _MuralCard({required this.badges, required this.onOpenAll});
 
   final Future<List<Insignia>>? badges;
   final VoidCallback onOpenAll;
 
+  /// Quantos hexágonos cabem na fila antes do "+N".
+  static const int _slots = 4;
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<Insignia>>(
       future: badges,
       builder: (context, snapshot) {
-        final earned = (snapshot.data ?? const <Insignia>[]).where((b) => b.earned).toList();
+        final catalog = snapshot.data ?? const <Insignia>[];
+        final earned = catalog.where((b) => b.earned).toList();
+        final locked = catalog.where((b) => !b.earned).toList();
+        final shown = earned.take(_slots).toList();
+        final filling = _slots - shown.length;
+        final hidden = earned.length > _slots ? earned.length - _slots : 0;
         return ProfileCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -837,7 +1079,7 @@ class _MuralCard extends StatelessWidget {
                     child: CircularProgressIndicator(),
                   ),
                 )
-              else if (earned.isEmpty)
+              else if (catalog.isEmpty)
                 Text(
                   'Nenhuma insígnia ainda — vá correr!',
                   style: TextStyle(
@@ -845,12 +1087,17 @@ class _MuralCard extends StatelessWidget {
                   ),
                 )
               else
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (final badge in earned)
-                      BadgeChip(badge: badge, showDate: true),
+                BadgeGrid(
+                  badges: [...shown, ...locked.take(filling)],
+                  showBar: false,
+                  emblemSize: 52,
+                  earnedLabel: (badge) => badge.earnedAt == null
+                      ? 'Ganha'
+                      : badgeWallDateLabel(badge.earnedAt!),
+                  onTap: (_) => onOpenAll(),
+                  extraCells: [
+                    if (hidden > 0)
+                      BadgeMoreTile(count: hidden, onTap: onOpenAll),
                   ],
                 ),
             ],
@@ -861,54 +1108,127 @@ class _MuralCard extends StatelessWidget {
   }
 }
 
-/// Vitrine estática das recompensas de nível: selos que a conta libera ao
-/// subir de nível. Não é resgate — o servidor concede pela regra do nível.
-class _LevelRewards extends StatelessWidget {
-  const _LevelRewards({required this.badges});
+/// Card resumido da liga competitiva: embleme da liga atual, RR dentro da
+/// divisão e o próximo degrau. Toque abre a escada completa (LigasScreen).
+class _LeagueCard extends StatelessWidget {
+  const _LeagueCard({required this.leagues, required this.onOpen});
 
-  final Future<List<Insignia>>? badges;
+  final Future<LeaguesResponse?>? leagues;
+  final VoidCallback onOpen;
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<List<Insignia>>(
-      future: badges,
+    return FutureBuilder<LeaguesResponse?>(
+      future: leagues,
       builder: (context, snapshot) {
-        final rewards = (snapshot.data ?? const <Insignia>[])
-            .where((b) => b.isLevelReward)
-            .toList();
-        if (snapshot.connectionState != ConnectionState.done) {
+        final data = snapshot.data;
+        if (data == null) {
+          // Carregando ou indisponível: nível e ranking seguem legíveis.
           return const SizedBox.shrink();
         }
-        if (rewards.isEmpty) {
-          // Sem catálogo não há vitrine: o resto da evolução segue legível.
-          return const SizedBox.shrink();
-        }
+        final me = data.me;
+        final entry = data.ladder.firstWhere(
+          (l) => l.key == me.league,
+          orElse: () => LeagueEntry(
+            key: me.league,
+            name: me.name,
+            color: me.color,
+            shape: 'circle',
+            tiers: const [],
+          ),
+        );
+        final accent = leagueColor(entry.color);
         final scheme = Theme.of(context).colorScheme;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'Recompensas de nível',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+        final next = me.next;
+        final divisionLabel = me.division == null ? '' : ' ${me.division}';
+        return InkWell(
+          onTap: onOpen,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: scheme.surfaceContainerHighest.withValues(alpha: .5),
+              borderRadius: BorderRadius.circular(12),
             ),
-            const SizedBox(height: 4),
-            Text(
-              'Selos concedidos pelo nível da conta, sem resgate.',
-              style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                for (final reward in rewards)
-                  Tooltip(
-                    message: reward.description,
-                    child: BadgeChip(badge: reward),
+                Row(
+                  children: [
+                    LeagueEmblem(
+                      color: accent,
+                      shape: entry.shape,
+                      size: 44,
+                      highlight: true,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${me.name}$divisionLabel'.toUpperCase(),
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.6,
+                              color: accent,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${formatPoints(me.trophies)} troféus (RR)',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: scheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(
+                      Icons.chevron_right,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ],
+                ),
+                if (me.rrToNext != null) ...[
+                  const SizedBox(height: 10),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: LinearProgressIndicator(
+                      value: me.rr / (me.rr + me.rrToNext!),
+                      minHeight: 6,
+                      backgroundColor: scheme.onSurfaceVariant.withValues(
+                        alpha: .15,
+                      ),
+                      valueColor: AlwaysStoppedAnimation(accent),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Faltam ${me.rrToNext} RR para '
+                    '${next!.name} ${next.division ?? ''}'.trim(),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ] else
+                  Padding(
+                    padding: const EdgeInsets.only(top: 10),
+                    child: Text(
+                      'Você está no topo da escada.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: accent,
+                      ),
+                    ),
                   ),
               ],
             ),
-          ],
+          ),
         );
       },
     );

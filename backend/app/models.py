@@ -38,6 +38,16 @@ class User(Base):
     is_public: Mapped[bool] = mapped_column(default=True)  # RF05 — configuração de privacidade / RN13
     share_activities: Mapped[bool] = mapped_column(default=True)  # Privacidade das corridas e atividades
     pronouns: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    # Presença: como o próprio corredor aparece. O servidor guarda a chave e o
+    # app dá nome e cor. "disponivel" | "ausente" (continua contando como
+    # online) | "nao_incomodar" (só o risco de perda e os pedidos da equipe
+    # chegam) | "invisivel" (some da contagem de online da equipe).
+    presence: Mapped[str] = mapped_column(String(16), default="disponivel")
+    # Batimento do app aberto (POST /presence). É o sinal de "por aqui" de quem
+    # não está correndo; o ping de GPS continua valendo enquanto corre.
+    last_seen_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True, index=True
+    )
     coin_balance: Mapped[int] = mapped_column(Integer, default=0)
     equipped_cosmetics: Mapped[str] = mapped_column(String, default="")
     daily_mission_date: Mapped[str | None] = mapped_column(String(10), nullable=True)
@@ -45,6 +55,8 @@ class User(Base):
     play_seconds: Mapped[int] = mapped_column(Integer, default=0)  # RF19 — tempo de jogo acumulado
     # Mercado interno (moedas + cosméticos).
     coins_balance: Mapped[int] = mapped_column(Integer, default=0)
+    # Ligas competitivas: RR ganho em conquistas e perdido em derrotas/perdas.
+    trophies: Mapped[int] = mapped_column(Integer, default=0)
     equipped_avatar: Mapped[str | None] = mapped_column(String(64), nullable=True)
     equipped_frame: Mapped[str | None] = mapped_column(String(64), nullable=True)
     equipped_effect: Mapped[str | None] = mapped_column(String(64), nullable=True)

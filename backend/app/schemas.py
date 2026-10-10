@@ -111,6 +111,12 @@ def validate_image_data_uri(value: str | None) -> str | None:
     return value
 
 
+# Presença: o servidor guarda a chave, o app dá nome e cor.
+# "ausente" continua contando como online; "nao_incomodar" deixa passar só o
+# risco de perda e os pedidos da equipe; "invisivel" some da contagem.
+PRESENCE_STATES = ("disponivel", "ausente", "nao_incomodar", "invisivel")
+
+
 class ProfileUpdateRequest(BaseModel):
     full_name: str | None = Field(default=None, min_length=2, max_length=120)
     username: str | None = Field(default=None, min_length=3, max_length=24)
@@ -125,6 +131,8 @@ class ProfileUpdateRequest(BaseModel):
     training_days: list[Literal["seg", "ter", "qua", "qui", "sex", "sab", "dom"]] | None = None
     activity_level: Literal["iniciante", "baixo_impacto", "moderado", "cardio"] | None = None
     mural_widgets: list[str] | None = None
+    # Presença (o pill do perfil): só os quatro estados conhecidos passam.
+    presence: Literal["disponivel", "ausente", "nao_incomodar", "invisivel"] | None = None
 
     @field_validator("photo_url")
     @classmethod
@@ -143,6 +151,18 @@ class ProfileUpdateRequest(BaseModel):
             return None
         # Remove duplicados, mantendo a ordem Seg..Dom.
         return [d for d in WEEKDAYS if d in set(value)]
+
+
+# A liga vista de fora: quem olha um perfil ou o ranking precisa do emblema e
+# do rótulo de outra pessoa, não do saldo de RR nem do próximo degrau dele
+# (isso continua só em GET /leagues, para o dono). Definida cedo porque o
+# perfil público e o ranking a incorporam; a escada fica na seção Ligas.
+class LeagueBadge(BaseModel):
+    league: str  # chave da liga em app/services/leagues.py
+    name: str
+    color: str
+    shape: str  # forma desenhada no hexágono (lado do app)
+    division: int | None  # None = Lenda, que não tem divisões
 
 
 class UserPublic(BaseModel):
@@ -165,6 +185,8 @@ class UserPublic(BaseModel):
     equipped_emoticons: list[str] = []
     # Mural: ids dos widgets que o dono exibe no perfil, em ordem.
     mural_widgets: list[str] = ["emoticons", "conquistas", "atividades", "estatisticas"]
+    # Liga atual, para o emblema aparecer onde outros jogadores são listados.
+    league: LeagueBadge
 
 
 class UserProfile(UserPublic):
@@ -175,6 +197,12 @@ class UserProfile(UserPublic):
     is_public: bool  # RF05
     share_activities: bool = True
     pronouns: str | None = None
+    # Presença escolhida por quem corre. Só no próprio perfil: o pill do
+    # cabeçalho é uma preferência, não um dado público.
+    presence: str = "disponivel"
+    # Ponto verde do avatar: sinal vivo (batimento do app ou GPS) dentro da
+    # janela, e falso para quem está "invisivel".
+    online: bool = False
     coin_balance: int = 0
     equipped_cosmetics: list[str] = []
     play_seconds: int  # RF19 — tempo de jogo
@@ -228,6 +256,8 @@ class TeamMemberInfo(BaseModel):
     username: str
     photo_url: str | None
     is_admin: bool = False
+    # Sinal de atividade dentro da janela, descontando quem está "invisivel".
+    is_online: bool = False
 
 
 class TeamJoinRequestEntry(BaseModel):
@@ -469,6 +499,8 @@ class RankingEntry(BaseModel):
     total_score: int
     territories_count: int
     level: int  # RF11 / RN10
+    # Liga do corredor; equipes não têm troféus, então não têm emblema.
+    league: LeagueBadge | None = None
     # Cosméticos equipados na loja (refletem no ranking e nas telas).
     equipped_avatar: str | None = None
     equipped_frame: str | None = None
@@ -633,8 +665,48 @@ class Badge(BaseModel):
     name: str
     description: str
     icon: str
+    category: str  # chave do grupo em app/services/badges.py (o app dá nome e cor)
     metric: str  # chave da métrica em app/services/badges.py
     threshold: float
     progress: float  # valor atual da métrica, para "3 de 10"
     earned: bool
     earned_at: datetime | None = None
+
+
+# ---------- Ligas (troféus competitivos por desempenho) ----------
+
+
+class LeagueNext(BaseModel):
+    league: str  # chave da liga em app/services/leagues.py
+    name: str
+    division: int | None  # None quando o próximo degrau é a Lenda
+
+
+class LeagueStatus(BaseModel):
+    trophies: int  # RR acumulado (piso em 0)
+    league: str
+    name: str
+    color: str  # cor oficial da liga, para o ícone
+    division: int | None  # None = Lenda, que não tem divisões
+    rr: int  # RR dentro da divisão atual
+    rr_to_next: int | None  # RR que falta para o próximo degrau
+    next: LeagueNext | None  # None quando já é a Lenda
+
+
+class LeagueTier(BaseModel):
+    division: int | None  # None = Lenda não tem divisões
+    at: int  # RR necessário para estar neste degrau
+
+
+class LeagueEntry(BaseModel):
+    key: str
+    name: str
+    color: str
+    shape: str  # forma desenhada no hexágono (lado do app)
+    tiers: list[LeagueTier]
+
+
+class LeaguesResponse(BaseModel):
+    me: LeagueStatus
+    ladder: list[LeagueEntry]
+

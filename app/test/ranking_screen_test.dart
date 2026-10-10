@@ -11,6 +11,25 @@ import 'package:runover_app/services/api_client.dart';
 import 'package:runover_app/state/app_state.dart';
 import 'package:runover_app/theme.dart';
 import 'package:runover_app/widgets/cosmetics.dart';
+import 'package:runover_app/widgets/league_emblem.dart';
+
+// Emblema como o servidor o devolve: chave, rótulo, cor, forma e divisão.
+const turboBadge = {
+  'league': 'turbo',
+  'name': 'Turbo',
+  'color': '#F5A524',
+  'shape': 'triangle',
+  'division': 2,
+};
+
+// Lenda não tem divisões: o rótulo é só o nome da liga.
+const lendaBadge = {
+  'league': 'lenda',
+  'name': 'Lenda',
+  'color': '#E8E8FF',
+  'shape': 'star',
+  'division': null,
+};
 
 const rankingData = [
   {
@@ -21,6 +40,7 @@ const rankingData = [
     'total_score': 900,
     'territories_count': 15,
     'level': 4,
+    'league': turboBadge,
   },
   {
     'position': 2,
@@ -219,6 +239,67 @@ void main() {
       ),
       findsWidgets,
     );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('pódio mostra a liga do rival e a equipe fica sem emblema', (
+    tester,
+  ) async {
+    await open(
+      tester,
+      Brightness.light,
+      ranking: [
+        rankingData[0], // 1º: Turbo 2
+        {...rankingData[1], 'league': null}, // 2º: sem emblema
+        rankingData[2], // equipe: o servidor nunca manda liga
+      ],
+    );
+    // O emblema de quem corre aparece com o rótulo da escada.
+    expect(find.text('TURBO 2'), findsOneWidget);
+    expect(find.byType(LeagueBadgeChip), findsOneWidget);
+    // Na aba de equipes o card existe, mas ninguém disputa a escada.
+    await tester.tap(find.text('Equipes'));
+    await tester.pumpAndSettle();
+    expect(find.text('Lobos do Asfalto'), findsOneWidget);
+    expect(find.byType(LeagueBadgeChip), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('card da lista traz a liga e Lenda vem sem divisão', (
+    tester,
+  ) async {
+    await open(
+      tester,
+      Brightness.light,
+      ranking: [
+        rankingData[0],
+        rankingData[1],
+        {
+          'position': 3,
+          'owner_type': 'user',
+          'name': 'bob',
+          'photo_url': null,
+          'total_score': 200,
+          'territories_count': 4,
+          'level': 2,
+        },
+        {
+          'position': 4,
+          'owner_type': 'user',
+          'name': 'avelino',
+          'photo_url': null,
+          'total_score': 90,
+          'territories_count': 2,
+          'level': 9,
+          'league': lendaBadge,
+        },
+      ],
+    );
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -320));
+    await tester.pumpAndSettle();
+    // O card da lista carrega o chip; "Lenda" não tem número de divisão.
+    expect(find.text('@avelino'), findsOneWidget);
+    expect(find.text('LENDA'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

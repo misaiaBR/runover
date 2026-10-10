@@ -16,8 +16,8 @@ from app.legal import privacy_response
 from app.h3cells import cell_for
 from app.models import Territory
 from app.routers import (
-    auth, badges, location, notifications, ranking, shop, teams, territories,
-    users, runs, pass_runover,
+    auth, badges, leagues, location, notifications, presence, ranking, shop, teams,
+    territories, users, runs, pass_runover,
 )
 
 initialize_database()
@@ -118,8 +118,10 @@ app.include_router(pass_runover.router)
 app.include_router(teams.router)
 app.include_router(territories.router)
 app.include_router(ranking.router)
+app.include_router(leagues.router)
 app.include_router(notifications.router)
 app.include_router(location.router)
+app.include_router(presence.router)
 app.include_router(runs.router)
 
 

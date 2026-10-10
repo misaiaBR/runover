@@ -1,5 +1,5 @@
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import func
@@ -10,7 +10,6 @@ from app.core.database import get_db, lock_mutations
 from app.core.security import get_current_user
 from app.models import (
     ConquestMark,
-    LocationPing,
     Run,
     ScoreEvent,
     Team,
@@ -43,6 +42,7 @@ from app.schemas import (
     TeamWallet,
 )
 from app.services.notifications import notify
+from app.services.presence import online_ids
 from app.services.scoring import (
     current_ownerships,
     level_info,
@@ -117,26 +117,6 @@ def _dissolve_team(db: Session, team: Team) -> None:
     db.delete(team)
 
 
-ONLINE_WINDOW = timedelta(minutes=15)
-
-
-def _online_count(db: Session, member_ids: list[str]) -> int:
-    """Membros com ping de localização dentro da janela (tempo real)."""
-    if not member_ids:
-        return 0
-    # Colunas DateTime sem timezone: compara em UTC naive (padrão de runs.py).
-    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - ONLINE_WINDOW
-    return (
-        db.query(LocationPing.user_id)
-        .filter(
-            LocationPing.user_id.in_(member_ids),
-            LocationPing.recorded_at >= cutoff,
-        )
-        .distinct()
-        .count()
-    )
-
-
 def _team_territories(db: Session, team_id: str) -> list[TeamTerritoryEntry]:
     """As zonas que a equipe tem hoje, da primeira conquista para a última.
 
@@ -164,6 +144,8 @@ def _team_territories(db: Session, team_id: str) -> list[TeamTerritoryEntry]:
 
 def _to_detail(db: Session, team: Team, viewer_id: str | None = None) -> TeamDetail:
     members = db.query(TeamMember).filter(TeamMember.team_id == team.id).all()
+    # Uma consulta de presença para a lista de membros e para a contagem.
+    online = online_ids(db, [m.user_id for m in members])
     admin_ids = set(_admin_ids(db, team))
     viewer_admin = viewer_id is not None and (
         team.creator_id == viewer_id or viewer_id in admin_ids
@@ -205,6 +187,7 @@ def _to_detail(db: Session, team: Team, viewer_id: str | None = None) -> TeamDet
                 username=m.user.username,
                 photo_url=m.user.photo_url,
                 is_admin=m.user_id in admin_ids,
+                is_online=m.user_id in online,
             )
             for m in members
         ],
@@ -227,7 +210,7 @@ def _to_detail(db: Session, team: Team, viewer_id: str | None = None) -> TeamDet
         is_admin=viewer_id is not None and _is_admin(db, team, viewer_id),
         my_request=my_request,
         pending_requests=pending,
-        online_count=_online_count(db, [m.user_id for m in members]),
+        online_count=len(online),
         team_balance=team_balance(db, team)[0],
         team_spent=team.spent_points or 0,
         equipped_avatar=team.equipped_avatar,

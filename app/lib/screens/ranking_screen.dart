@@ -6,6 +6,7 @@ import '../models.dart';
 import '../state/app_state.dart';
 import '../widgets/centered_content.dart';
 import '../widgets/cosmetics.dart';
+import '../widgets/league_emblem.dart';
 import 'public_profile_screen.dart';
 
 class RankingScreen extends StatefulWidget {
@@ -405,6 +406,15 @@ class _RankingScreenState extends State<RankingScreen> {
                 fontWeight: FontWeight.w600,
               ),
             ),
+            // Liga de quem está no pódio — emblema e rótulo, sem o RR.
+            if (entry.league != null) ...[
+              const SizedBox(height: 6),
+              LeagueBadgeChip(
+                badge: entry.league!,
+                emblemSize: 22,
+                fontSize: 11,
+              ),
+            ],
             const SizedBox(height: 12),
             Container(
               height: barHeight,
@@ -522,6 +532,13 @@ class _RankingScreenState extends State<RankingScreen> {
                           ),
                       ],
                     ),
+                    // Liga de quem está na lista — emblema e rótulo, sem o RR
+                    // do rival. Linha própria: ao lado do nome do adversário o
+                    // card é estreito demais. Equipe não tem liga.
+                    if (entry.league != null) ...[
+                      const SizedBox(height: 4),
+                      LeagueBadgeChip(badge: entry.league!),
+                    ],
                     Text(
                       '${entry.territoriesCount} territórios',
                       style: TextStyle(

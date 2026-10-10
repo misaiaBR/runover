@@ -209,3 +209,34 @@ def wild_spawns_for(
             out.append(s)
     out.sort(key=lambda s: s["distance_m"])
     return out[:MAX_RESULTS]
+
+
+WELCOME_RADIUS_M = 500.0  # sem nada vivo até aqui, o novato ganha um spawn
+
+
+def welcome_spawn_for(cell: tuple[int, int], now: datetime) -> dict:
+    """Spawn de boas-vindas da célula: comum, determinístico por célula + hora.
+
+    Como os demais spawns, é compartilhado (todos os novatos veem o mesmo e
+    quem fechar o laço primeiro consome para todo mundo) e gira a cada hora.
+    A posição é sorteada dentro da célula e grudada na via mais próxima — sem
+    rua por perto (ou com o Overpass fora), fica no ponto sorteado.
+    """
+    bucket = hour_bucket(now)
+    key = f"welcome:{cell[0]}:{cell[1]}:{bucket.strftime('%Y%m%d%H')}"
+    rng = _rng("welcome-spot", key)
+    lat = (cell[0] + rng.random()) * CELL_DEG
+    lng = (cell[1] + rng.random()) * CELL_DEG
+    snapped = snap_to_street(lat, lng, key)
+    if snapped is not None:
+        lat, lng = snapped
+    return {
+        "key": key,
+        "lat": lat,
+        "lng": lng,
+        "radius_m": 80,
+        "relevance": 1,
+        "rarity": "comum",
+        "spawned_at": bucket,
+        "expires_at": bucket + timedelta(hours=BUCKET_HOURS),
+    }

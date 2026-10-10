@@ -15,6 +15,7 @@ import 'package:runover_app/services/api_client.dart';
 import 'package:runover_app/services/position_refiner.dart';
 import 'package:runover_app/state/app_state.dart';
 import 'package:runover_app/widgets/crown_icon.dart';
+import 'package:runover_app/widgets/play_mode_sheet.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'profile_screen_test.dart' show profileData;
@@ -92,6 +93,14 @@ void main() {
     await tester.pump(const Duration(seconds: 16));
     await tester.pump();
   }
+
+  /// Todos os marcadores visíveis: as camadas são separadas por categoria
+  /// (livres, dominados, selvagens, posição) para o foco da mecânica apagar
+  /// cada uma sem tocar nas outras.
+  Iterable<Marker> allMarkers(WidgetTester tester) =>
+      tester
+          .widgetList<MarkerLayer>(find.byType(MarkerLayer))
+          .expand((layer) => layer.markers);
 
   Future<void> openMap(WidgetTester tester) async {
     await tester.pumpWidget(
@@ -171,10 +180,7 @@ void main() {
       findsOneWidget,
     );
     expect(geo.requests, 0);
-    expect(
-      tester.widget<MarkerLayer>(find.byType(MarkerLayer)).markers,
-      isEmpty,
-    );
+    expect(allMarkers(tester), isEmpty);
     expect(find.byType(CircleLayer), findsNothing);
   });
 
@@ -186,10 +192,7 @@ void main() {
       await tester.tap(find.byTooltip('Atualizar localização'));
       await pumpMap(tester);
       expect(find.textContaining('A localização demorou'), findsOneWidget);
-      expect(
-        tester.widget<MarkerLayer>(find.byType(MarkerLayer)).markers,
-        isEmpty,
-      );
+      expect(allMarkers(tester), isEmpty);
       expect(find.byType(CircleLayer), findsNothing);
       geo.error = null;
       await tester.tap(find.byTooltip('Atualizar localização'));
@@ -219,10 +222,24 @@ void main() {
       find.textContaining('posição recebida está desatualizada'),
       findsOneWidget,
     );
-    expect(
-      tester.widget<MarkerLayer>(find.byType(MarkerLayer)).markers,
-      isEmpty,
+    expect(allMarkers(tester), isEmpty);
+  });
+
+  testWidgets('o mapa obedece ao modo escolhido na dica', (tester) async {
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
+        create: (_) => AppState(api: api),
+        child: const MaterialApp(
+          home: MapScreen(focus: PlayMode.huntWild),
+        ),
+      ),
     );
+    await pumpMap(tester);
+    expect(find.textContaining('Caçando selvagem'), findsOneWidget);
+    await tester.tap(find.byTooltip('Dispensar dica'));
+    await tester.pump();
+    expect(find.textContaining('Caçando selvagem'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   test(

@@ -27,14 +27,28 @@ from app.h3cells import cell_for, covering_cells
 from app.models import ClaimReceipt, ConquestMark, ScoreEvent, SpawnClaim, Team, TeamMember, Territory, TerritoryOwnership, User
 from app.schemas import ClaimRequest, ClaimResponse, TerritoryDetail, TerritorySummary, WildSpawn
 from app.services.notifications import notify
+from app.services.leagues import (
+    apply_trophies,
+    conquest_reward,
+    defeat_penalty,
+    league_changed,
+    loss_penalty,
+)
 from app.services.scoring import (
+    current_owner_territory_ids,
     current_ownerships,
     level_info,
     total_score,
     total_team_score,
     user_rank_positions,
 )
-from app.services.spawns import wild_spawns_for, wild_spawns_in_bounds
+from app.services.spawns import (
+    WELCOME_RADIUS_M,
+    cell_id,
+    welcome_spawn_for,
+    wild_spawns_for,
+    wild_spawns_in_bounds,
+)
 
 router = APIRouter(prefix="/territories", tags=["territórios"])
 
@@ -171,9 +185,13 @@ def wild_territories(
     lng: float = Query(ge=-180, le=180),
     radius_km: float = Query(2.0, gt=0, le=200),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
-    """Spawns selvagens ao redor — somem ao fim da hora ou quando conquistados."""
+    """Spawns selvagens ao redor — somem ao fim da hora ou quando conquistados.
+
+    Quem ainda não tem território e está num bairro vazio (nada vivo num
+    raio) ganha um spawn comum de boas-vindas por perto.
+    """
     now = datetime.now(timezone.utc)
     claimed = _live_spawn_keys(db, now)
     activity = [
@@ -185,6 +203,23 @@ def wild_territories(
             Territory.center_lng.isnot(None),
         ).all()
     ]
+    live = [
+        s
+        for s in wild_spawns_for(lat, lng, radius_km, now, activity=activity)
+        if s["key"] not in claimed
+    ]
+    if not current_owner_territory_ids(db, current_user.id):
+        nearest = min((s["distance_m"] for s in live), default=None)
+        if nearest is None or nearest > WELCOME_RADIUS_M:
+            welcome = welcome_spawn_for(cell_id(lat, lng), now)
+            welcome["distance_m"] = haversine_m(
+                lat, lng, welcome["lat"], welcome["lng"]
+            )
+            if (
+                welcome["key"] not in claimed
+                and welcome["distance_m"] <= radius_km * 1000
+            ):
+                live.append(welcome)
     return [
         WildSpawn(
             key=s["key"],
@@ -195,8 +230,7 @@ def wild_territories(
             spawned_at=s["spawned_at"],
             expires_at=s["expires_at"],
         )
-        for s in wild_spawns_for(lat, lng, radius_km, now, activity=activity)
-        if s["key"] not in claimed
+        for s in live
     ]
 
 
@@ -380,6 +414,13 @@ def apply_claim(
                 data.challenge, current_mark, distance_m, duration_seconds
             ):
                 # Derrota: a corrida é salva, mas sem pontos nem troca de dono.
+                # Para a liga, porém, desafio perdido é derrota de verdade: RR.
+                rr = apply_trophies(
+                    db, current_user, -defeat_penalty(distance_m), "derrota_desafio"
+                )
+                changed, message = league_changed(rr)
+                if changed:
+                    notify(db, current_user.id, message, "liga")
                 total = (
                     total_team_score(db, team.id)
                     if team
@@ -421,6 +462,14 @@ def apply_claim(
             db.add(ScoreEvent(user_id=current_owner.owner_user_id, territory_id=territory.id,
                                delta=-settings.loss_penalty_points, reason="perda"))
             notify(db, current_owner.owner_user_id, f"Você perdeu o território {territory.name}.", "perda")
+            # Liga: perder território próprio é derrota — RR individual. Perda
+            # de território da equipe não move RR (seria de qual membro?).
+            owner = db.get(User, current_owner.owner_user_id)
+            if owner is not None:
+                rr = apply_trophies(db, owner, -loss_penalty(territory.relevance), "perda_territorio")
+                changed, message = league_changed(rr)
+                if changed:
+                    notify(db, owner.id, message, "liga")
 
     latest_claim_at = current_owner.conquered_at if current_owner else None
     claim_time = datetime.now(timezone.utc)
@@ -455,6 +504,12 @@ def apply_claim(
     ))
 
     verb = "criou e dominou" if created_new else "dominou"
+    # Liga: a vitória é do usuário que correu — vale RR em conquista pessoal
+    # ou de equipe. (A perda do dono anterior foi tratada acima, quando há.)
+    rr = apply_trophies(db, current_user, conquest_reward(distance_m, relevance), "conquista")
+    changed, message = league_changed(rr)
+    if changed:
+        notify(db, current_user.id, message, "liga")
     if team:
         # RN15 — pontuação vai para a equipe, não para o usuário individualmente
         db.add(ScoreEvent(team_id=team.id, territory_id=territory.id, delta=points, reason="conquista"))

@@ -184,6 +184,13 @@ class ApiClient {
 
   Future<UserProfile> getMyProfile() async =>
       UserProfile.fromJson(await _request('GET', '/users/me'));
+
+  /// Presença do pill do perfil: grava só a chave escolhida (o servidor usa a
+  /// presença da chave no PATCH, então nada mais do perfil é tocado).
+  Future<void> setPresence(String presence) async {
+    await _request('PATCH', '/users/me', {'presence': presence});
+  }
+
   Future<UserProfile> updateProfile({
     String? fullName,
     String? username,
@@ -267,6 +274,11 @@ class ApiClient {
       ((await _request('GET', '/badges')) as List)
           .map((e) => Insignia.fromJson(Map<String, dynamic>.from(e)))
           .toList();
+
+  /// Ligas: escada da temporada + posição atual do jogador (RR).
+  Future<LeaguesResponse> getLeagues() async => LeaguesResponse.fromJson(
+    Map<String, dynamic>.from(await _request('GET', '/leagues')),
+  );
 
   /// Desativação temporária: a conta some e o login bloqueia, mas nada
   /// é apagado — volta com [reactivate].

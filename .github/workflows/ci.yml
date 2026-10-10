@@ -62,7 +62,7 @@ jobs:
           cache-dependency-path: backend/requirements-dev.txt
       - run: pip install -r backend/requirements-dev.txt
       - run: PYTHONPATH=backend python -m unittest discover -s backend/tests -v
-      - run: PYTHONPATH=backend python -m pytest backend/tests/test_password_reset.py backend/tests/test_claim_integrity.py backend/tests/test_badges.py backend/tests/test_team_zones.py backend/tests/test_team_history.py backend/tests/test_team_trail.py backend/tests/test_team_settings.py -q
+      - run: PYTHONPATH=backend python -m pytest backend/tests/test_password_reset.py backend/tests/test_claim_integrity.py backend/tests/test_badges.py backend/tests/test_team_zones.py backend/tests/test_team_history.py backend/tests/test_team_trail.py backend/tests/test_team_settings.py backend/tests/test_leagues.py backend/tests/test_presence.py -q
       - run: PYTHONPATH=backend python -m unittest discover -s backend/tests -v
         env:
           RUNOVER_TEST_POSTGRES_URL: postgresql+psycopg://postgres@127.0.0.1:55432/runover_test
