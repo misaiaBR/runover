@@ -75,6 +75,25 @@ Future<LeaguesResponse?> _leaguesOrNull(ApiClient api) async {
   }
 }
 
+/// O passe também é opcional aqui: o atalho mostra o número de tiers liberados
+/// quando o servidor responde e segue sem contagem quando não responde.
+Future<Map<String, dynamic>?> _passOrNull(ApiClient api) async {
+  try {
+    return await api.getPassRunover();
+  } catch (_) {
+    return null;
+  }
+}
+
+/// Contagem de um atalho do perfil, no singular certo.
+/// Sem dado do servidor devolve null: o card fica sem número em vez de
+/// inventar um zero que o corredor não tem.
+String? _shortcutCount(Object? value, String singular, String plural) {
+  if (value is! num || !value.isFinite) return null;
+  final count = value.toInt();
+  return '$count ${count == 1 ? singular : plural}';
+}
+
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
@@ -95,6 +114,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<List<ShopItem>>? _catalog;
   Future<List<Insignia>>? _badges;
   Future<LeaguesResponse?>? _leagues;
+  Future<Map<String, dynamic>?>? _pass;
   bool _photoBusy = false;
 
   @override
@@ -106,6 +126,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _catalog ??= _catalogOrEmpty(state.api);
       _badges ??= _badgesOrEmpty(state.api);
       _leagues ??= _leaguesOrNull(state.api);
+      _pass ??= _passOrNull(state.api);
     }
   }
 
@@ -115,11 +136,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final catalogRequest = _catalogOrEmpty(state.api);
     final badgesRequest = _badgesOrEmpty(state.api);
     final leaguesRequest = _leaguesOrNull(state.api);
+    final passRequest = _passOrNull(state.api);
     setState(() {
       _progress = progressRequest;
       _catalog = catalogRequest;
       _badges = badgesRequest;
       _leagues = leaguesRequest;
+      _pass = passRequest;
     });
     try {
       await Future.wait([
@@ -128,6 +151,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         catalogRequest,
         badgesRequest,
         leaguesRequest,
+        passRequest,
       ]);
     } catch (_) {
       if (mounted) {
@@ -170,6 +194,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final next = _leaguesOrNull(context.read<AppState>().api);
     setState(() {
       _leagues = next;
+    });
+  }
+
+  /// O tier liberado avança com os pontos da temporada, então a contagem do
+  /// atalho é recarregada quando o passe fecha.
+  Future<void> _openPass() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const SeasonPassScreen()));
+    if (!mounted) return;
+    final next = _passOrNull(context.read<AppState>().api);
+    setState(() {
+      _pass = next;
     });
   }
 
@@ -643,13 +680,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 16),
-            _MuralCard(badges: _badges, onOpenAll: _openBadges),
           ],
         );
       },
     );
-    final activity = Column(
+    // Coluna do meio: a semana em curso e o mural, o que o corredor fez e o
+    // que ele tem para mostrar.
+    final week = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         FutureBuilder<Map<String, dynamic>>(
@@ -691,39 +728,65 @@ class _ProfileScreenState extends State<ProfileScreen> {
           },
         ),
         const SizedBox(height: 16),
-        ProfileCard(
-          child: Column(
-            children: [
-              _profileLink(
-                Icons.directions_run,
-                'Minhas corridas',
-                'Veja seus percursos e atividades',
-                () => Navigator.of(
-                  context,
-                ).push(MaterialPageRoute(builder: (_) => const RunsScreen())),
+        _MuralCard(badges: _badges, onOpenAll: _openBadges),
+      ],
+    );
+    // Última coluna: um card por destino, cada um com a contagem que o
+    // servidor tem daquele corredor hoje.
+    final shortcuts = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        FutureBuilder<Map<String, dynamic>>(
+          future: _progress,
+          builder: (context, snapshot) {
+            return _ShortcutCard(
+              icon: Icons.directions_run,
+              title: 'Minhas corridas',
+              subtitle: 'Veja seus percursos e atividades',
+              counter: _shortcutCount(
+                snapshot.data?['runs_count'],
+                'atividade',
+                'atividades',
               ),
-              const Divider(height: 24),
-              _profileLink(
-                Icons.emoji_events_outlined,
-                'Histórico de conquistas',
-                'Acompanhe seus territórios e pontos',
-                () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const HistoryScreen()),
-                ),
-              ),
-              const Divider(height: 24),
-              _profileLink(
-                Icons.workspace_premium_outlined,
-                'Pass Runover',
-                'Temporada e a trilha de XP',
-                () => Navigator.of(
-                  context,
-                ).push(MaterialPageRoute(builder: (_) => const SeasonPassScreen())),
-              ),
-            ],
-          ),
+              onTap: () => Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const RunsScreen())),
+            );
+          },
         ),
         const SizedBox(height: 12),
+        _ShortcutCard(
+          icon: Icons.emoji_events_outlined,
+          title: 'Histórico de conquistas',
+          subtitle: 'Acompanhe seus territórios e pontos',
+          counter: _shortcutCount(
+            profile.territoriesCount,
+            'território',
+            'territórios',
+          ),
+          onTap: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const HistoryScreen())),
+        ),
+        const SizedBox(height: 12),
+        FutureBuilder<Map<String, dynamic>?>(
+          future: _pass,
+          builder: (context, snapshot) {
+            return _ShortcutCard(
+              icon: Icons.workspace_premium_outlined,
+              title: 'Passe de Temporada',
+              subtitle: 'Temporada e a trilha de XP',
+              // Sem o /pass respondendo o card fica sem número, não com zero.
+              counter: _shortcutCount(
+                snapshot.data?['unlocked_tier'],
+                'tier liberado',
+                'tiers liberados',
+              ),
+              onTap: _openPass,
+            );
+          },
+        ),
+        const SizedBox(height: 4),
         TextButton(
           onPressed: () => Navigator.of(
             context,
@@ -770,28 +833,57 @@ class _ProfileScreenState extends State<ProfileScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
           child: Center(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 1080),
+              constraints: const BoxConstraints(maxWidth: 1180),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   LayoutBuilder(
                     builder: (context, constraints) {
-                      if (constraints.maxWidth < 760) {
+                      final width = constraints.maxWidth;
+                      if (width < 760) {
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             identity,
                             const SizedBox(height: 20),
-                            activity,
+                            week,
+                            const SizedBox(height: 20),
+                            shortcuts,
                           ],
                         );
                       }
+                      // Quem é você e para onde vai fica na primeira coluna,
+                      // com largura fixa: é a única que não cresce.
+                      final about = SizedBox(width: 340, child: identity);
+                      if (width < 1080) {
+                        return Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            about,
+                            const SizedBox(width: 24),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  week,
+                                  const SizedBox(height: 20),
+                                  shortcuts,
+                                ],
+                              ),
+                            ),
+                          ],
+                        );
+                      }
+                      // Três colunas: identidade + evolução | semana + mural |
+                      // atalhos.
                       return Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          SizedBox(width: 320, child: identity),
+                          about,
                           const SizedBox(width: 24),
-                          Expanded(child: activity),
+                          Expanded(child: week),
+                          const SizedBox(width: 24),
+                          SizedBox(width: 300, child: shortcuts),
                         ],
                       );
                     },
@@ -806,20 +898,87 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
+}
 
-  Widget _profileLink(
-    IconData icon,
-    String title,
-    String subtitle,
-    VoidCallback onTap,
-  ) {
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: Icon(icon, color: RunoverColors.route),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-      subtitle: Text(subtitle),
-      trailing: const Icon(Icons.chevron_right),
-      onTap: onTap,
+/// Atalho da última coluna do perfil: um card por destino, com o ícone, o que
+/// ele abre e a contagem do servidor. Sem contagem (dado indisponível) o card
+/// segue legível e só perde o número.
+class _ShortcutCard extends StatelessWidget {
+  const _ShortcutCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+    this.counter,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final String? counter;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Card(
+      margin: EdgeInsets.zero,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: RunoverColors.route.withValues(alpha: .10),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: RunoverColors.route, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                    // A contagem vai embaixo do texto, e não na ponta do card:
+                    // ao lado do título ela o espreme na coluna estreita.
+                    if (counter != null) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        counter!,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: RunoverColors.territory,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, size: 18),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

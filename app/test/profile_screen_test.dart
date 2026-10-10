@@ -138,11 +138,23 @@ final leaguesData = {
   ],
 };
 
+// GET /pass: só o tier liberado entra na contagem do atalho do perfil.
+const passData = {
+  'season_id': '2026-06',
+  'ends_at': '2026-07-01T00:00:00Z',
+  'seasonal_points': 340,
+  'unlocked_tier': 5,
+  'premium_unlocked': false,
+  'premium_price_coins': 400,
+  'tiers': [],
+};
+
 void main() {
   Future<void> open(
     WidgetTester tester,
     Size size, {
     bool failFirst = false,
+    Map<String, dynamic>? pass,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
@@ -166,6 +178,12 @@ void main() {
         }
         if (request.url.path == '/leagues') {
           return http.Response(jsonEncode(leaguesData), 200);
+        }
+        if (request.url.path == '/pass') {
+          return http.Response(
+            jsonEncode(pass ?? {'detail': 'Indisponível'}),
+            pass == null ? 404 : 200,
+          );
         }
         return http.Response('{}', 404);
       }),
@@ -202,6 +220,56 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('the profile reads as three columns on a wide screen', (
+    tester,
+  ) async {
+    await open(tester, const Size(1440, 1000), pass: passData);
+    // Identidade | semana + mural | atalhos. O mural saiu da coluna do meio
+    // da identidade para dividir a tela com a semana.
+    final identity = tester.getTopLeft(find.text('Editar perfil')).dx;
+    final week = tester.getTopLeft(find.text('ESTA SEMANA')).dx;
+    final mural = tester.getTopLeft(find.text('Mural · 2')).dx;
+    final shortcuts = tester.getTopLeft(find.text('Passe de Temporada')).dx;
+    expect(identity, lessThan(week));
+    expect((week - mural).abs(), lessThan(2));
+    expect(shortcuts, greaterThan(week + 200));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('each shortcut carries the count the server has', (
+    tester,
+  ) async {
+    await open(tester, const Size(1440, 1000), pass: passData);
+    expect(find.text('12 atividades'), findsOneWidget);
+    expect(find.text('4 territórios'), findsOneWidget);
+    expect(find.text('5 tiers liberados'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a failing /pass leaves the shortcut without an invented count', (
+    tester,
+  ) async {
+    await open(tester, const Size(1440, 1000));
+    expect(find.text('Passe de Temporada'), findsOneWidget);
+    expect(find.textContaining('tiers liberados'), findsNothing);
+    // Os outros dois contam vêm de outras fontes e seguem na tela.
+    expect(find.text('12 atividades'), findsOneWidget);
+    expect(find.text('4 territórios'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the phone stack puts the shortcuts after the mural', (
+    tester,
+  ) async {
+    await open(tester, const Size(320, 740));
+    final mural = tester.getBottomLeft(find.text('Mural · 2')).dy;
+    final firstShortcut = tester.getTopLeft(find.text('Minhas corridas')).dy;
+    final lastShortcut = tester.getTopLeft(find.text('Passe de Temporada')).dy;
+    expect(firstShortcut, greaterThan(mural));
+    expect(lastShortcut, greaterThan(firstShortcut));
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('small phone stacks the profile and keeps edit available', (
     tester,
