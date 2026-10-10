@@ -10,6 +10,7 @@ import 'package:runover_app/screens/public_profile_screen.dart';
 import 'package:runover_app/services/api_client.dart';
 import 'package:runover_app/state/app_state.dart';
 import 'package:runover_app/theme.dart';
+import 'package:runover_app/widgets/league_emblem.dart';
 
 import 'profile_screen_test.dart' show profileData;const publicData = {
   'username': 'ana',
@@ -22,6 +23,13 @@ import 'profile_screen_test.dart' show profileData;const publicData = {
   'level_progress': 0.5,
   'points_to_next_level': 200,
   'equipped_emoticons': ['🏆'],
+  'league': {
+    'league': 'turbo',
+    'name': 'Turbo',
+    'color': '#F5A524',
+    'shape': 'triangle',
+    'division': 2,
+  },
 };
 
 void main() {
@@ -82,6 +90,17 @@ void main() {
     // Sem menus do próprio perfil.
     expect(find.text('Editar perfil'), findsNothing);
     expect(find.text('Mural'), findsNothing);
+    // A liga de quem é visto: emblema e rótulo ao lado da equipe. O saldo de
+    // RR do rival não sai daqui — só do GET /leagues dele.
+    expect(find.text('TURBO 2'), findsOneWidget);
+    expect(find.byType(LeagueBadgeChip), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('perfil sem liga não mostra emblema', (tester) async {
+    await open(tester, body: {...publicData, 'league': null});
+    expect(find.text('Lobos do Asfalto'), findsOneWidget);
+    expect(find.byType(LeagueBadgeChip), findsNothing);
     expect(tester.takeException(), isNull);
   });
 

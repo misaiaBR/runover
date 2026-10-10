@@ -29,6 +29,7 @@ from app.models import (
     UserItem,
 )
 from app.schemas import HistoryEntry, ProfileUpdateRequest, UserProfile, UserPublic
+from app.services.leagues import badge_for
 from app.services.scoring import (
     current_owner_territory_ids,
     level_info,
@@ -80,6 +81,9 @@ def _to_public(db: Session, user: User) -> UserPublic:
         equipped_name_style=user.equipped_name_style,
         equipped_emoticons=_emoticons_list(user),
         mural_widgets=_mural_list(user),
+        # A liga entra em todo UserPublic: é o que o perfil público e o
+        # ranking desenham um do outro. O RR continua só em GET /leagues.
+        league=badge_for(user.trophies),
     )
 
 

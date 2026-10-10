@@ -7,6 +7,7 @@ import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/centered_content.dart';
 import '../widgets/cosmetics.dart';
+import '../widgets/league_emblem.dart';
 import '../widgets/level_badge.dart';
 import '../widgets/profile_activity.dart';
 
@@ -213,16 +214,34 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                                               ],
                                             ),
                                           ],
-                                          if (p.teamName != null) ...[
+                                          if (p.teamName != null ||
+                                              p.league != null) ...[
                                             const SizedBox(height: 8),
-                                            Chip(
-                                              avatar: const Icon(
-                                                Icons.groups_outlined,
-                                                size: 17,
-                                              ),
-                                              label: Text(p.teamName!),
-                                              visualDensity:
-                                                  VisualDensity.compact,
+                                            Wrap(
+                                              spacing: 8,
+                                              runSpacing: 6,
+                                              crossAxisAlignment:
+                                                  WrapCrossAlignment.center,
+                                              children: [
+                                                if (p.teamName != null)
+                                                  Chip(
+                                                    avatar: const Icon(
+                                                      Icons.groups_outlined,
+                                                      size: 17,
+                                                    ),
+                                                    label: Text(p.teamName!),
+                                                    visualDensity:
+                                                        VisualDensity.compact,
+                                                  ),
+                                                // A liga de quem é visto:
+                                                // emblema e rótulo. O RR e o
+                                                // próximo degrau não saem do
+                                                // GET /leagues dele.
+                                                if (p.league != null)
+                                                  LeagueBadgeChip(
+                                                    badge: p.league!,
+                                                  ),
+                                              ],
                                             ),
                                           ],
                                           const SizedBox(height: 12),

@@ -147,6 +147,23 @@ def status_for(trophies: int) -> dict:
     }
 
 
+def badge_for(trophies: int) -> dict:
+    """A liga de quem é visto por fora: emblema e rótulo, nada de saldo.
+
+    O RR e o próximo degrau só saem em GET /leagues, para o dono. Assim o
+    ranking e o perfil público mostram a posição de cada corredor sem expor a
+    contagem dele, e os números continuam vindo desta mesma escada.
+    """
+    league, tier = _tier_for(trophies)
+    return {
+        "league": league["key"],
+        "name": league["name"],
+        "color": league["color"],
+        "shape": league["shape"],
+        "division": tier["division"],
+    }
+
+
 def ladder_payload() -> list[dict]:
     """A escada completa como o app desenha (Largada → Lenda)."""
     return [

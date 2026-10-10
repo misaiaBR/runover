@@ -146,6 +146,7 @@ class RankingRow:
         equipped_effect: str | None = None,
         equipped_banner: str | None = None,
         equipped_name_style: str | None = None,
+        trophies: int = 0,
     ):
         self.owner_type = owner_type
         self.name = name
@@ -158,6 +159,8 @@ class RankingRow:
         self.equipped_banner = equipped_banner
         self.equipped_name_style = equipped_name_style
         self.level = level_info(score)[0]  # RF11 / RN10
+        # RR de quem é listado; equipes não disputam a escada, ficam em 0.
+        self.trophies = trophies
 
 
 def _score_maps(db: Session, since: datetime | None = None) -> tuple[dict[str, int], dict[str, int]]:
@@ -202,6 +205,7 @@ def full_ranking(db: Session, since: datetime | None = None) -> list[RankingRow]
             equipped_effect=u.equipped_effect,
             equipped_banner=u.equipped_banner,
             equipped_name_style=u.equipped_name_style,
+            trophies=u.trophies,
         ))
     for t in db.query(Team).all():
         rows.append(RankingRow(

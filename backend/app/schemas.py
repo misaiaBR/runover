@@ -145,6 +145,18 @@ class ProfileUpdateRequest(BaseModel):
         return [d for d in WEEKDAYS if d in set(value)]
 
 
+# A liga vista de fora: quem olha um perfil ou o ranking precisa do emblema e
+# do rótulo de outra pessoa, não do saldo de RR nem do próximo degrau dele
+# (isso continua só em GET /leagues, para o dono). Definida cedo porque o
+# perfil público e o ranking a incorporam; a escada fica na seção Ligas.
+class LeagueBadge(BaseModel):
+    league: str  # chave da liga em app/services/leagues.py
+    name: str
+    color: str
+    shape: str  # forma desenhada no hexágono (lado do app)
+    division: int | None  # None = Lenda, que não tem divisões
+
+
 class UserPublic(BaseModel):
     username: str
     photo_url: str | None
@@ -165,6 +177,8 @@ class UserPublic(BaseModel):
     equipped_emoticons: list[str] = []
     # Mural: ids dos widgets que o dono exibe no perfil, em ordem.
     mural_widgets: list[str] = ["emoticons", "conquistas", "atividades", "estatisticas"]
+    # Liga atual, para o emblema aparecer onde outros jogadores são listados.
+    league: LeagueBadge
 
 
 class UserProfile(UserPublic):
@@ -469,6 +483,8 @@ class RankingEntry(BaseModel):
     total_score: int
     territories_count: int
     level: int  # RF11 / RN10
+    # Liga do corredor; equipes não têm troféus, então não têm emblema.
+    league: LeagueBadge | None = None
     # Cosméticos equipados na loja (refletem no ranking e nas telas).
     equipped_avatar: str | None = None
     equipped_frame: str | None = None

@@ -2,6 +2,59 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../models.dart';
+
+/// Cor oficial da liga a partir do hex que o servidor devolve (`#RRGGBB`).
+/// Um único parser para toda a escada: tela de Ligas, card do perfil e o
+/// emblema dos outros jogadores.
+Color leagueColor(String hex) {
+  final value = int.tryParse(hex.replaceFirst('#', ''), radix: 16);
+  if (value == null) return const Color(0xFF8A94A6);
+  return Color(0xFF000000 | value);
+}
+
+/// A liga de outra pessoa, em linha: emblema pequeno + rótulo ("TURBO 2").
+/// É o que o ranking e o perfil público mostram — o RR continua privado.
+class LeagueBadgeChip extends StatelessWidget {
+  const LeagueBadgeChip({
+    super.key,
+    required this.badge,
+    this.emblemSize = 26,
+    this.fontSize = 12,
+  });
+
+  final LeagueBadge badge;
+  final double emblemSize;
+  final double fontSize;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = leagueColor(badge.color);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        LeagueEmblem(color: color, shape: badge.shape, size: emblemSize),
+        const SizedBox(width: 6),
+        // Flexible: dentro de um Wrap apertado o rótulo encurta em vez de
+        // estourar a linha.
+        Flexible(
+          child: Text(
+            badge.label.toUpperCase(),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: fontSize,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.5,
+              color: color,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 /// Emblema de liga: hexágono na cor oficial com a forma interna da liga
 /// (`circle`, `triangle`, `diamond`, `pentagon`, `hexagon`, `octagon`,
 /// `gem`, `star`). Usado no card do perfil e na escada da tela de Ligas.

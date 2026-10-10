@@ -284,6 +284,8 @@ class PublicProfile {
   final String? equippedNameStyle;
   final List<String> equippedEmoticons;
   final List<String> muralWidgets;
+  // Liga atual de quem é visto — emblema e rótulo, sem o RR dele.
+  final LeagueBadge? league;
 
   const PublicProfile({
     required this.username,
@@ -307,6 +309,7 @@ class PublicProfile {
       'atividades',
       'estatisticas',
     ],
+    this.league,
   });
 
   factory PublicProfile.fromJson(Map<String, dynamic> j) => PublicProfile(
@@ -332,6 +335,9 @@ class PublicProfile {
           const ['emoticons', 'conquistas', 'atividades', 'estatisticas'])
         '$w',
     ],
+    league: j['league'] == null
+        ? null
+        : LeagueBadge.fromJson(Map<String, dynamic>.from(j['league'])),
   );
 }
 
@@ -507,6 +513,35 @@ class LeagueStatus {
         ? null
         : LeagueNext.fromJson(Map<String, dynamic>.from(j['next'])),
   );
+}
+
+/// Liga vista de fora: o emblema e o rótulo de outra pessoa, sem o saldo de
+/// RR nem o próximo degrau (isso só sai em GET /leagues, para o dono).
+class LeagueBadge {
+  final String league;
+  final String name;
+  final String color;
+  final String shape; // mesmo vocabulário do LeagueEmblem
+  final int? division; // null = Lenda
+
+  const LeagueBadge({
+    required this.league,
+    required this.name,
+    required this.color,
+    required this.shape,
+    required this.division,
+  });
+
+  factory LeagueBadge.fromJson(Map<String, dynamic> j) => LeagueBadge(
+    league: '${j['league']}',
+    name: '${j['name']}',
+    color: '${j['color'] ?? '#8A94A6'}',
+    shape: '${j['shape'] ?? 'circle'}',
+    division: (j['division'] as num?)?.toInt(),
+  );
+
+  /// "Turbo 2", ou só "Lenda" quando a liga não tem divisões.
+  String get label => division == null ? name : '$name $division';
 }
 
 class LeagueTier {
@@ -891,6 +926,8 @@ class RankingEntry {
   final String? equippedEffect;
   final String? equippedBanner;
   final String? equippedNameStyle;
+  // Emblema da liga do corredor; equipes não disputam a escada.
+  final LeagueBadge? league;
 
   const RankingEntry({
     required this.position,
@@ -905,6 +942,7 @@ class RankingEntry {
     this.equippedEffect,
     this.equippedBanner,
     this.equippedNameStyle,
+    this.league,
   });
 
   factory RankingEntry.fromJson(Map<String, dynamic> j) => RankingEntry(
@@ -920,6 +958,9 @@ class RankingEntry {
     equippedEffect: j['equipped_effect'],
     equippedBanner: j['equipped_banner'],
     equippedNameStyle: j['equipped_name_style'],
+    league: j['league'] == null
+        ? null
+        : LeagueBadge.fromJson(Map<String, dynamic>.from(j['league'])),
   );
 }
 

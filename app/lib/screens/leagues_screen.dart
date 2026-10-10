@@ -141,7 +141,7 @@ class _MeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final leagueColor = _parseColor(entry.color);
+    final accent = leagueColor(entry.color);
     final divisionLabel = me.division == null ? '' : ' ${me.division}';
     final next = me.next;
     return ProfileCard(
@@ -151,7 +151,7 @@ class _MeCard extends StatelessWidget {
           Row(
             children: [
               LeagueEmblem(
-                color: leagueColor,
+                color: accent,
                 shape: entry.shape,
                 size: 56,
                 highlight: true,
@@ -166,7 +166,7 @@ class _MeCard extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w800,
-                        color: leagueColor,
+                        color: accent,
                         letterSpacing: 0.6,
                       ),
                     ),
@@ -202,7 +202,7 @@ class _MeCard extends StatelessWidget {
                 value: me.rr / (me.rr + me.rrToNext!),
                 minHeight: 8,
                 backgroundColor: scheme.onSurfaceVariant.withValues(alpha: .15),
-                valueColor: AlwaysStoppedAnimation(leagueColor),
+                valueColor: AlwaysStoppedAnimation(accent),
               ),
             ),
             const SizedBox(height: 6),
@@ -218,7 +218,7 @@ class _MeCard extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
-                  color: leagueColor,
+                  color: accent,
                 ),
               ),
             ),
@@ -271,7 +271,7 @@ class _LadderBoard extends StatelessWidget {
       final isCurrent =
           data.me.league == league.key && data.me.division == tier.division;
       final reached = data.me.trophies >= tier.at;
-      final color = _parseColor(league.color);
+      final color = leagueColor(league.color);
       return SizedBox(
         width: _cellWidth * _s,
         child: Column(
@@ -327,7 +327,7 @@ class _LadderBoard extends StatelessWidget {
                         fontSize: 12 * _s,
                         fontWeight: FontWeight.w800,
                         letterSpacing: 0.8,
-                        color: _parseColor(league.color).withValues(
+                        color: leagueColor(league.color).withValues(
                           alpha: data.me.league == league.key ? 1.0 : 0.55,
                         ),
                       ),
@@ -369,10 +369,4 @@ class _LadderBoard extends StatelessWidget {
       ),
     );
   }
-}
-
-Color _parseColor(String hex) {
-  final value = int.tryParse(hex.replaceFirst('#', ''), radix: 16);
-  if (value == null) return const Color(0xFF8A94A6);
-  return Color(0xFF000000 | value);
 }

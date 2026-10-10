@@ -8,6 +8,7 @@ from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models import User
 from app.schemas import RankingEntry
+from app.services.leagues import badge_for
 from app.services.scoring import full_ranking
 
 router = APIRouter(tags=["ranking"])
@@ -42,6 +43,9 @@ def get_ranking(
             equipped_effect=row.equipped_effect,
             equipped_banner=row.equipped_banner,
             equipped_name_style=row.equipped_name_style,
+            # Emblema da liga de quem corre; equipe não tem troféu, então não
+            # tem liga — o app deixa o espaço vazio.
+            league=badge_for(row.trophies) if row.owner_type == "user" else None,
         )
         for i, row in enumerate(full_ranking(db, since=since), start=1)
     ]  # RF12 / RN11 — jogadores e equipes juntos

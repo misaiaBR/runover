@@ -933,7 +933,7 @@ class _LeagueCard extends StatelessWidget {
             tiers: const [],
           ),
         );
-        final leagueColor = _parseLeagueColor(entry.color);
+        final accent = leagueColor(entry.color);
         final scheme = Theme.of(context).colorScheme;
         final next = me.next;
         final divisionLabel = me.division == null ? '' : ' ${me.division}';
@@ -952,7 +952,7 @@ class _LeagueCard extends StatelessWidget {
                 Row(
                   children: [
                     LeagueEmblem(
-                      color: leagueColor,
+                      color: accent,
                       shape: entry.shape,
                       size: 44,
                       highlight: true,
@@ -968,7 +968,7 @@ class _LeagueCard extends StatelessWidget {
                               fontSize: 15,
                               fontWeight: FontWeight.w800,
                               letterSpacing: 0.6,
-                              color: leagueColor,
+                              color: accent,
                             ),
                           ),
                           const SizedBox(height: 2),
@@ -998,7 +998,7 @@ class _LeagueCard extends StatelessWidget {
                       backgroundColor: scheme.onSurfaceVariant.withValues(
                         alpha: .15,
                       ),
-                      valueColor: AlwaysStoppedAnimation(leagueColor),
+                      valueColor: AlwaysStoppedAnimation(accent),
                     ),
                   ),
                   const SizedBox(height: 6),
@@ -1018,7 +1018,7 @@ class _LeagueCard extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
-                        color: leagueColor,
+                        color: accent,
                       ),
                     ),
                   ),
@@ -1029,12 +1029,6 @@ class _LeagueCard extends StatelessWidget {
       },
     );
   }
-}
-
-Color _parseLeagueColor(String hex) {
-  final value = int.tryParse(hex.replaceFirst('#', ''), radix: 16);
-  if (value == null) return const Color(0xFF8A94A6);
-  return Color(0xFF000000 | value);
 }
 
 /// Bloco de menu do cartão de identidade (editar, loja, insígnias…).

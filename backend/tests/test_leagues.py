@@ -4,12 +4,22 @@ from app.models import User
 from app.services.leagues import (
     LADDER,
     apply_trophies,
+    badge_for,
     conquest_reward,
     defeat_penalty,
     league_changed,
     loss_penalty,
     status_for,
 )
+
+
+def _register(client, username, email):
+    response = client.post("/auth/register", json={
+        "full_name": f"{username} Name", "username": username, "email": email,
+        "password": "secret123", "accept_terms": True,
+    })
+    assert response.status_code == 201, response.text
+    return {"Authorization": f"Bearer {response.json()['access_token']}"}
 
 
 def test_ladder_has_seven_leagues_three_divisions_plus_lenda():
@@ -96,3 +106,40 @@ def test_leagues_endpoint_returns_me_and_ladder(client, registered_user):
     lenda = body["ladder"][-1]
     assert lenda["key"] == "lenda"
     assert lenda["tiers"][0]["at"] == 2100
+
+
+def test_badge_for_exposes_only_the_emblem():
+    assert badge_for(0) == {
+        "league": "largada", "name": "Largada", "color": "#8A94A6",
+        "shape": "circle", "division": 1,
+    }
+    turbo = badge_for(1300)
+    assert (turbo["league"], turbo["division"]) == ("turbo", 2)
+    lenda = badge_for(2400)
+    assert lenda["division"] is None and lenda["shape"] == "star"
+    # O rival vê a liga, nunca o saldo: sem RR e sem próximo degrau.
+    assert "trophies" not in turbo and "rr" not in turbo and "next" not in turbo
+
+
+def test_public_profile_and_ranking_carry_the_same_badge(client, db_session):
+    rival = _register(client, "rival_liga", "rival_liga@example.com")
+    viewer = _register(client, "veja_liga", "veja_liga@example.com")
+    user = db_session.query(User).filter(User.username == "rival_liga").one()
+    user.trophies = 1300  # Turbo 2
+    db_session.commit()
+
+    public = client.get("/users/rival_liga", headers=viewer).json()
+    assert public["league"] == badge_for(1300)
+    # O próprio perfil lê a mesma liga que o /leagues dele.
+    mine = client.get("/leagues", headers=rival).json()["me"]
+    assert (mine["league"], mine["division"]) == (
+        public["league"]["league"], public["league"]["division"],
+    )
+
+    team = client.post("/teams", json={"name": "Time Escada"}, headers=rival)
+    assert team.status_code == 201
+    ranking = {row["name"]: row for row in client.get("/ranking", headers=viewer).json()}
+    assert ranking["rival_liga"]["league"] == badge_for(1300)
+    # Equipe não disputa a escada: fica sem emblema.
+    assert ranking["Time Escada"]["owner_type"] == "team"
+    assert ranking["Time Escada"]["league"] is None
