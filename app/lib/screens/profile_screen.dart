@@ -824,19 +824,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
-/// Mural do perfil: as conquistas publicadas como insígnias já ganhas.
+/// Mural do perfil: as insígnias em hexágonos, as ganhas na frente. O que
+/// falta para completar a fila aparece bloqueado, com o progresso da regra.
 class _MuralCard extends StatelessWidget {
   const _MuralCard({required this.badges, required this.onOpenAll});
 
   final Future<List<Insignia>>? badges;
   final VoidCallback onOpenAll;
 
+  /// Quantos hexágonos cabem na fila antes do "+N".
+  static const int _slots = 4;
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<Insignia>>(
       future: badges,
       builder: (context, snapshot) {
-        final earned = (snapshot.data ?? const <Insignia>[]).where((b) => b.earned).toList();
+        final catalog = snapshot.data ?? const <Insignia>[];
+        final earned = catalog.where((b) => b.earned).toList();
+        final locked = catalog.where((b) => !b.earned).toList();
+        final shown = earned.take(_slots).toList();
+        final filling = _slots - shown.length;
+        final hidden = earned.length > _slots ? earned.length - _slots : 0;
         return ProfileCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -866,7 +875,7 @@ class _MuralCard extends StatelessWidget {
                     child: CircularProgressIndicator(),
                   ),
                 )
-              else if (earned.isEmpty)
+              else if (catalog.isEmpty)
                 Text(
                   'Nenhuma insígnia ainda — vá correr!',
                   style: TextStyle(
@@ -874,12 +883,17 @@ class _MuralCard extends StatelessWidget {
                   ),
                 )
               else
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (final badge in earned)
-                      BadgeChip(badge: badge, showDate: true),
+                BadgeGrid(
+                  badges: [...shown, ...locked.take(filling)],
+                  showBar: false,
+                  emblemSize: 52,
+                  earnedLabel: (badge) => badge.earnedAt == null
+                      ? 'Ganha'
+                      : badgeWallDateLabel(badge.earnedAt!),
+                  onTap: (_) => onOpenAll(),
+                  extraCells: [
+                    if (hidden > 0)
+                      BadgeMoreTile(count: hidden, onTap: onOpenAll),
                   ],
                 ),
             ],

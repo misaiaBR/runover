@@ -515,12 +515,13 @@ void main() {
       // O mural publica as insígnias ganhas (GET /badges), com a data do
       // registro; "Primeira corrida" só aparece uma vez: no card de atividade,
       // porque no mural o chip carrega a data no rótulo.
+      // O mural publica as insígnias ganhas (GET /badges) como hexágonos com a
+      // data do registro embaixo. "Primeira corrida" aparece duas vezes: uma no
+      // mural, outra no card de atividade.
       expect(find.text('Mural · 2'), findsOneWidget);
-      expect(
-        find.text('Primeira corrida · 7 de mar. de 2026'),
-        findsOneWidget,
-      );
-      expect(find.text('Primeira corrida'), findsOneWidget);
+      expect(find.text('7 mar. 2026'), findsOneWidget);
+      expect(find.text('2 abr. 2026'), findsOneWidget);
+      expect(find.text('Primeira corrida'), findsNWidgets(2));
       expect(find.text('Editar perfil'), findsOneWidget);
       expect(find.text('Loja de cosméticos'), findsOneWidget);
       expect(find.text('Insígnias'), findsOneWidget);

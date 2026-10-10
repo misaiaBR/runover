@@ -419,6 +419,7 @@ class Insignia {
   final String name;
   final String description;
   final String icon; // run | flag | route | team
+  final String category; // corridas | territorios | distancia | acumulados | equipe | temporada
   final String metric;
   final double threshold;
   final double progress;
@@ -430,6 +431,7 @@ class Insignia {
     required this.name,
     required this.description,
     required this.icon,
+    this.category = '',
     required this.metric,
     required this.threshold,
     required this.progress,
@@ -442,6 +444,7 @@ class Insignia {
     name: '${j['name']}',
     description: '${j['description']}',
     icon: '${j['icon'] ?? 'verified'}',
+    category: '${j['category'] ?? ''}',
     metric: '${j['metric'] ?? ''}',
     threshold: (j['threshold'] as num?)?.toDouble() ?? 0,
     progress: (j['progress'] as num?)?.toDouble() ?? 0,
