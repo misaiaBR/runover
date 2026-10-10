@@ -8,7 +8,7 @@ import 'package:http/testing.dart';
 import 'package:provider/provider.dart';
 import 'package:runover_app/models.dart';
 import 'package:runover_app/screens/home_screen.dart';
-import 'package:runover_app/screens/pass_trail_screen.dart';
+import 'package:runover_app/screens/season_pass_screen.dart';
 import 'package:runover_app/screens/profile_screen.dart';
 import 'package:runover_app/screens/speed_screen.dart';
 import 'package:runover_app/services/api_client.dart';
@@ -621,12 +621,13 @@ void main() {
 
     await tester.scrollUntilVisible(find.text('Ver a trilha'), 300);
     await tester.pumpAndSettle();
-    expect(find.byType(PassTrailScreen), findsNothing);
+    expect(find.byType(SeasonPassScreen), findsNothing);
 
     await tester.tap(find.text('Ver a trilha'));
     await tester.pumpAndSettle();
-    expect(find.byType(PassTrailScreen), findsOneWidget);
-    expect(find.text('Tier 1 · 200 XP'), findsOneWidget);
+    expect(find.byType(SeasonPassScreen), findsOneWidget);
+    // Modo backend: a temporada vem do mock (`passStatus`).
+    expect(find.text('Temporada outubro de 2026'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

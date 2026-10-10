@@ -13,7 +13,7 @@ import '../widgets/cosmetics.dart';
 import '../widgets/insignia.dart';
 import '../widgets/level_badge.dart';
 import 'badges_screen.dart';
-import 'pass_trail_screen.dart';
+import 'season_pass_screen.dart';
 import 'app_footer.dart';
 import 'terms_screen.dart';
 import 'edit_profile_screen.dart';
@@ -687,9 +687,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 Icons.workspace_premium_outlined,
                 'Pass Runover',
                 'Temporada e a trilha de XP',
-                () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const PassTrailScreen()),
-                ),
+                () => Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => const SeasonPassScreen())),
               ),
             ],
           ),

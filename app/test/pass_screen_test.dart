@@ -7,7 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:provider/provider.dart';
 import 'package:runover_app/models.dart';
-import 'package:runover_app/screens/pass_trail_screen.dart';
+import 'package:runover_app/screens/season_pass_screen.dart';
 import 'package:runover_app/services/api_client.dart';
 import 'package:runover_app/state/app_state.dart';
 import 'package:runover_app/theme.dart';
@@ -50,7 +50,7 @@ Map<String, dynamic> passStatus({
   ],
 };
 
-/// A trilha vista pelo teste: estado do servidor, chamadas registradas e o
+/// A tela vista pelo teste: estado do servidor, chamadas registradas e o
 /// `AppState` que a tela observa.
 class _PassFixture {
   _PassFixture({
@@ -156,7 +156,7 @@ void main() {
         value: fixture.state,
         child: MaterialApp(
           theme: buildRunoverTheme(),
-          home: const PassTrailScreen(),
+          home: const SeasonPassScreen(),
         ),
       ),
     );
@@ -164,30 +164,30 @@ void main() {
     return fixture;
   }
 
-  /// A trilha é maior que a janela de teste: sem trazer o botão para a
+  /// A trilha é maior que a janela de teste: sem trazer o cartão para a
   /// viewport o toque cai no vazio e nada é resgatado.
-  Future<void> claimFreeTrack(WidgetTester tester) async {
-    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Grátis'));
+  Future<void> claimFreeReward(WidgetTester tester) async {
+    await tester.ensureVisible(find.text('Resgatar'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Grátis'));
+    await tester.tap(find.text('Resgatar'));
   }
 
-  testWidgets('mostra temporada, tiers e resgata a trilha grátis', (
+  testWidgets('mostra temporada, níveis e resgata a faixa grátis', (
     tester,
   ) async {
     final pass = await openPass(tester);
-    expect(find.text('Pass Runover'), findsOneWidget);
-    expect(find.textContaining('outubro de 2026'), findsOneWidget);
-    expect(find.textContaining('250 XP'), findsOneWidget);
-    expect(find.text('1'), findsOneWidget);
-    expect(find.text('2'), findsOneWidget);
-    // A trilha percorrida por XP: um nó por tier, o corredor no XP alcançado.
-    expect(find.text('Tier 1 · 200 XP'), findsOneWidget);
-    expect(find.text('Tier 2 · 400 XP'), findsOneWidget);
-    expect(find.text('Faltam 150 XP'), findsOneWidget);
-    expect(find.bySemanticsLabel('Você aqui'), findsOneWidget);
+    expect(find.text('Passe de Temporada'), findsOneWidget);
+    expect(find.text('Temporada outubro de 2026'), findsOneWidget);
+    expect(find.text('Nível 1'), findsOneWidget);
+    expect(find.text('250 / 400 pts'), findsOneWidget);
+    // A trilha horizontal: um nó por nível, rótulos fixos à esquerda.
+    expect(find.text('Grátis'), findsOneWidget);
+    expect(find.text('Passe'), findsOneWidget);
+    expect(find.text('+10 🪙'), findsOneWidget);
+    expect(find.text('Requer passe'), findsOneWidget);
+    expect(find.text('Nível 2'), findsNWidgets(2));
 
-    await claimFreeTrack(tester);
+    await claimFreeReward(tester);
     final fetches = pass.passFetches;
     await tester.pumpAndSettle();
     expect(pass.calls, [('claim', 1, 'free')]);
@@ -200,15 +200,18 @@ void main() {
 
   testWidgets('premium desbloqueia com confirmação', (tester) async {
     final pass = await openPass(tester);
-    expect(find.textContaining('1.000 dracmas'), findsOneWidget);
+    expect(find.text('Ver passe'), findsOneWidget);
 
-    await tester.tap(find.textContaining('1.000 dracmas'));
+    await tester.tap(find.text('Ver passe'));
     await tester.pumpAndSettle();
     expect(find.text('Trilha premium?'), findsOneWidget);
+    expect(find.textContaining('1.000 dracmas'), findsOneWidget);
     await tester.tap(find.text('Desbloquear'));
     await tester.pumpAndSettle();
     expect(pass.calls, [('premium',)]);
-    expect(find.text('Trilha premium ativa'), findsOneWidget);
+    expect(find.text('Trilha premium desbloqueada!'), findsOneWidget);
+    // Com o passe, o banner some: a faixa premium vira resgatável.
+    expect(find.text('Ver passe'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -216,7 +219,7 @@ void main() {
     tester,
   ) async {
     final pass = await openPass(tester);
-    expect(find.textContaining('1.000 dracmas'), findsOneWidget);
+    expect(find.text('Ver passe'), findsOneWidget);
     final fetches = pass.passFetches;
 
     // A loja liberou o premium; o painel não viu a compra acontecer.
@@ -225,8 +228,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(pass.passFetches, fetches + 1);
-    expect(find.text('Trilha premium ativa'), findsOneWidget);
-    expect(find.textContaining('1.000 dracmas'), findsNothing);
+    expect(find.text('Ver passe'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -237,7 +239,7 @@ void main() {
     final fetches = pass.passFetches;
 
     pass.holdClaim = Completer<void>();
-    await claimFreeTrack(tester);
+    await claimFreeReward(tester);
     await tester.pump();
 
     // A conta mudou enquanto o resgate estava em voo: ocupado, o painel espera.
@@ -251,7 +253,7 @@ void main() {
 
     // O resgate falhou, então a recarga é o flush do fim da operação.
     expect(pass.passFetches, fetches + 1);
-    expect(find.text('Trilha premium ativa'), findsOneWidget);
+    expect(find.text('Ver passe'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }

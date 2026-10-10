@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../state/app_state.dart';
-import 'pass_trail_screen.dart';
+import 'season_pass_screen.dart';
 
 /// Atalho da home: um resumo do passe que abre a trilha ao toque.
 class PassCard extends StatefulWidget {
@@ -62,7 +62,7 @@ class _PassCardState extends State<PassCard> with AccountWatcher<PassCard> {
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const PassTrailScreen()),
+              MaterialPageRoute(builder: (_) => const SeasonPassScreen()),
             ),
             child: PassSummary(
               status: status,
