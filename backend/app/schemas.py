@@ -633,6 +633,7 @@ class Badge(BaseModel):
     name: str
     description: str
     icon: str
+    category: str  # chave do grupo em app/services/badges.py (o app dá nome e cor)
     metric: str  # chave da métrica em app/services/badges.py
     threshold: float
     progress: float  # valor atual da métrica, para "3 de 10"

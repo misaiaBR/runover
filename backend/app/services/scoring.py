@@ -127,6 +127,12 @@ def user_team(db: Session, user_id: str) -> Team | None:
     return membership.team if membership else None
 
 
+# Meta semanal do Pit stop: os quilômetros que a equipe soma na semana-corrida.
+# Uma única fonte — o card do Pit stop (`GET /runs/progress`) e a insígnia
+# "Pit stop completo" comparam contra o mesmo número.
+TEAM_WEEK_GOAL_KM = 30
+
+
 class RankingRow:
     def __init__(
         self,

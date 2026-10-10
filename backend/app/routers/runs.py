@@ -18,7 +18,7 @@ from app.models import Run, User
 from app.schemas import RunDetail, RunProgress, RunRequest, RunSummary
 from app.routers.territories import apply_claim
 from app.services.coins import earn_for_run
-from app.services.scoring import user_team
+from app.services.scoring import TEAM_WEEK_GOAL_KM, user_team
 
 router = APIRouter(prefix="/runs", tags=["corridas"])
 
@@ -157,7 +157,7 @@ def progress(
     if team:
         contributions = db.query(User.username, func.sum(Run.distance_m)).join(Run, Run.user_id == User.id).filter(
             Run.team_id == team.id, Run.started_at >= week, Run.started_at < week_end).group_by(User.id, User.username).order_by(func.sum(Run.distance_m).desc()).all()
-        team_progress = {"name":team.name, "target_km":30, "distance_km":round(sum(d for _,d in contributions)/1000,2),
+        team_progress = {"name":team.name, "target_km":TEAM_WEEK_GOAL_KM, "distance_km":round(sum(d for _,d in contributions)/1000,2),
                          "contributors":[{"username":name,"distance_km":round(d/1000,2)} for name,d in contributions]}
     # Sequência (streak): dias consecutivos com ao menos 1 corrida, no
     # fuso do aparelho. Se hoje ainda não tem corrida, a sequência segue
