@@ -16,7 +16,7 @@ import '../widgets/league_emblem.dart';
 import '../widgets/level_badge.dart';
 import 'badges_screen.dart';
 import 'leagues_screen.dart';
-import 'pass_trail_screen.dart';
+import 'season_pass_screen.dart';
 import 'app_footer.dart';
 import 'terms_screen.dart';
 import 'edit_profile_screen.dart';
@@ -718,7 +718,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 'Temporada e a trilha de XP',
                 () => Navigator.of(
                   context,
-                ).push(MaterialPageRoute(builder: (_) => const PassTrailScreen())),
+                ).push(MaterialPageRoute(builder: (_) => const SeasonPassScreen())),
               ),
             ],
           ),
