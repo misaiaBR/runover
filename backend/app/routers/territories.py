@@ -27,6 +27,13 @@ from app.h3cells import cell_for, covering_cells
 from app.models import ClaimReceipt, ConquestMark, ScoreEvent, SpawnClaim, Team, TeamMember, Territory, TerritoryOwnership, User
 from app.schemas import ClaimRequest, ClaimResponse, TerritoryDetail, TerritorySummary, WildSpawn
 from app.services.notifications import notify
+from app.services.leagues import (
+    apply_trophies,
+    conquest_reward,
+    defeat_penalty,
+    league_changed,
+    loss_penalty,
+)
 from app.services.scoring import (
     current_ownerships,
     level_info,
@@ -380,6 +387,13 @@ def apply_claim(
                 data.challenge, current_mark, distance_m, duration_seconds
             ):
                 # Derrota: a corrida é salva, mas sem pontos nem troca de dono.
+                # Para a liga, porém, desafio perdido é derrota de verdade: RR.
+                rr = apply_trophies(
+                    db, current_user, -defeat_penalty(distance_m), "derrota_desafio"
+                )
+                changed, message = league_changed(rr)
+                if changed:
+                    notify(db, current_user.id, message, "liga")
                 total = (
                     total_team_score(db, team.id)
                     if team
@@ -421,6 +435,14 @@ def apply_claim(
             db.add(ScoreEvent(user_id=current_owner.owner_user_id, territory_id=territory.id,
                                delta=-settings.loss_penalty_points, reason="perda"))
             notify(db, current_owner.owner_user_id, f"Você perdeu o território {territory.name}.", "perda")
+            # Liga: perder território próprio é derrota — RR individual. Perda
+            # de território da equipe não move RR (seria de qual membro?).
+            owner = db.get(User, current_owner.owner_user_id)
+            if owner is not None:
+                rr = apply_trophies(db, owner, -loss_penalty(territory.relevance), "perda_territorio")
+                changed, message = league_changed(rr)
+                if changed:
+                    notify(db, owner.id, message, "liga")
 
     latest_claim_at = current_owner.conquered_at if current_owner else None
     claim_time = datetime.now(timezone.utc)
@@ -455,6 +477,12 @@ def apply_claim(
     ))
 
     verb = "criou e dominou" if created_new else "dominou"
+    # Liga: a vitória é do usuário que correu — vale RR em conquista pessoal
+    # ou de equipe. (A perda do dono anterior foi tratada acima, quando há.)
+    rr = apply_trophies(db, current_user, conquest_reward(distance_m, relevance), "conquista")
+    changed, message = league_changed(rr)
+    if changed:
+        notify(db, current_user.id, message, "liga")
     if team:
         # RN15 — pontuação vai para a equipe, não para o usuário individualmente
         db.add(ScoreEvent(team_id=team.id, territory_id=territory.id, delta=points, reason="conquista"))
