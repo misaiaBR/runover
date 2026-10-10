@@ -5,14 +5,17 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../models.dart';
+import '../format.dart';
 import '../services/api_client.dart';
 import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/cosmetics.dart';
 import '../widgets/insignia.dart';
+import '../widgets/league_emblem.dart';
 import '../widgets/level_badge.dart';
 import 'badges_screen.dart';
+import 'leagues_screen.dart';
 import 'pass_trail_screen.dart';
 import 'app_footer.dart';
 import 'terms_screen.dart';
@@ -52,13 +55,23 @@ String _memberSinceLabel(DateTime date) {
   return '${date.day} de ${months[date.month - 1]} de ${date.year}';
 }
 
-/// As insígnias também são opcionais no perfil: sem elas o mural e a vitrine
-/// de nível ficam vazios, mas a conta continua legível.
+/// As insígnias também são opcionais no perfil: sem elas o mural fica vazio,
+/// mas a conta continua legível.
 Future<List<Insignia>> _badgesOrEmpty(ApiClient api) async {
   try {
     return await api.getBadges();
   } catch (_) {
     return const <Insignia>[];
+  }
+}
+
+/// Ligas são opcionais no perfil: sem o endpoint o painel de evolução segue
+/// com nível e ranking, só sem o card de liga.
+Future<LeaguesResponse?> _leaguesOrNull(ApiClient api) async {
+  try {
+    return await api.getLeagues();
+  } catch (_) {
+    return null;
   }
 }
 
@@ -81,6 +94,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<Map<String, dynamic>>? _progress;
   Future<List<ShopItem>>? _catalog;
   Future<List<Insignia>>? _badges;
+  Future<LeaguesResponse?>? _leagues;
   bool _photoBusy = false;
 
   @override
@@ -91,6 +105,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _progress ??= state.api.getProgress();
       _catalog ??= _catalogOrEmpty(state.api);
       _badges ??= _badgesOrEmpty(state.api);
+      _leagues ??= _leaguesOrNull(state.api);
     }
   }
 
@@ -99,10 +114,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final progressRequest = state.api.getProgress();
     final catalogRequest = _catalogOrEmpty(state.api);
     final badgesRequest = _badgesOrEmpty(state.api);
+    final leaguesRequest = _leaguesOrNull(state.api);
     setState(() {
       _progress = progressRequest;
       _catalog = catalogRequest;
       _badges = badgesRequest;
+      _leagues = leaguesRequest;
     });
     try {
       await Future.wait([
@@ -110,6 +127,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         progressRequest,
         catalogRequest,
         badgesRequest,
+        leaguesRequest,
       ]);
     } catch (_) {
       if (mounted) {
@@ -141,6 +159,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final next = _badgesOrEmpty(context.read<AppState>().api);
     setState(() {
       _badges = next;
+    });
+  }
+
+  Future<void> _openLeagues() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const LeaguesScreen()));
+    if (!mounted) return;
+    final next = _leaguesOrNull(context.read<AppState>().api);
+    setState(() {
+      _leagues = next;
     });
   }
 
@@ -610,7 +639,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ],
                   ),
                   const SizedBox(height: 20),
-                  _LevelRewards(badges: _badges),
+                  _LeagueCard(leagues: _leagues, onOpen: _openLeagues),
                 ],
               ),
             ),
@@ -687,9 +716,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 Icons.workspace_premium_outlined,
                 'Pass Runover',
                 'Temporada e a trilha de XP',
-                () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const PassTrailScreen()),
-                ),
+                () => Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => const PassTrailScreen())),
               ),
             ],
           ),
@@ -861,58 +890,137 @@ class _MuralCard extends StatelessWidget {
   }
 }
 
-/// Vitrine estática das recompensas de nível: selos que a conta libera ao
-/// subir de nível. Não é resgate — o servidor concede pela regra do nível.
-class _LevelRewards extends StatelessWidget {
-  const _LevelRewards({required this.badges});
+/// Card resumido da liga competitiva: embleme da liga atual, RR dentro da
+/// divisão e o próximo degrau. Toque abre a escada completa (LigasScreen).
+class _LeagueCard extends StatelessWidget {
+  const _LeagueCard({required this.leagues, required this.onOpen});
 
-  final Future<List<Insignia>>? badges;
+  final Future<LeaguesResponse?>? leagues;
+  final VoidCallback onOpen;
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<List<Insignia>>(
-      future: badges,
+    return FutureBuilder<LeaguesResponse?>(
+      future: leagues,
       builder: (context, snapshot) {
-        final rewards = (snapshot.data ?? const <Insignia>[])
-            .where((b) => b.isLevelReward)
-            .toList();
-        if (snapshot.connectionState != ConnectionState.done) {
+        final data = snapshot.data;
+        if (data == null) {
+          // Carregando ou indisponível: nível e ranking seguem legíveis.
           return const SizedBox.shrink();
         }
-        if (rewards.isEmpty) {
-          // Sem catálogo não há vitrine: o resto da evolução segue legível.
-          return const SizedBox.shrink();
-        }
+        final me = data.me;
+        final entry = data.ladder.firstWhere(
+          (l) => l.key == me.league,
+          orElse: () => LeagueEntry(
+            key: me.league,
+            name: me.name,
+            color: me.color,
+            shape: 'circle',
+            tiers: const [],
+          ),
+        );
+        final leagueColor = _parseLeagueColor(entry.color);
         final scheme = Theme.of(context).colorScheme;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'Recompensas de nível',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+        final next = me.next;
+        final divisionLabel = me.division == null ? '' : ' ${me.division}';
+        return InkWell(
+          onTap: onOpen,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: scheme.surfaceContainerHighest.withValues(alpha: .5),
+              borderRadius: BorderRadius.circular(12),
             ),
-            const SizedBox(height: 4),
-            Text(
-              'Selos concedidos pelo nível da conta, sem resgate.',
-              style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                for (final reward in rewards)
-                  Tooltip(
-                    message: reward.description,
-                    child: BadgeChip(badge: reward),
+                Row(
+                  children: [
+                    LeagueEmblem(
+                      color: leagueColor,
+                      shape: entry.shape,
+                      size: 44,
+                      highlight: true,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${me.name}$divisionLabel'.toUpperCase(),
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.6,
+                              color: leagueColor,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${formatPoints(me.trophies)} troféus (RR)',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: scheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(
+                      Icons.chevron_right,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ],
+                ),
+                if (me.rrToNext != null) ...[
+                  const SizedBox(height: 10),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: LinearProgressIndicator(
+                      value: me.rr / (me.rr + me.rrToNext!),
+                      minHeight: 6,
+                      backgroundColor: scheme.onSurfaceVariant.withValues(
+                        alpha: .15,
+                      ),
+                      valueColor: AlwaysStoppedAnimation(leagueColor),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Faltam ${me.rrToNext} RR para '
+                    '${next!.name} ${next.division ?? ''}'.trim(),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ] else
+                  Padding(
+                    padding: const EdgeInsets.only(top: 10),
+                    child: Text(
+                      'Você está no topo da escada.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: leagueColor,
+                      ),
+                    ),
                   ),
               ],
             ),
-          ],
+          ),
         );
       },
     );
   }
+}
+
+Color _parseLeagueColor(String hex) {
+  final value = int.tryParse(hex.replaceFirst('#', ''), radix: 16);
+  if (value == null) return const Color(0xFF8A94A6);
+  return Color(0xFF000000 | value);
 }
 
 /// Bloco de menu do cartão de identidade (editar, loja, insígnias…).

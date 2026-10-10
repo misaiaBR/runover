@@ -52,12 +52,11 @@ void main() {
   testWidgets('the screen lists the catalog with the earned date and the '
       'progress of what is still locked', (tester) async {
     await openScreen(tester);
-    expect(find.text('Ganhas · 2 de 5'), findsOneWidget);
+    expect(find.text('Ganhas · 2 de 3'), findsOneWidget);
     expect(find.text('Ganha em 7 de mar. de 2026'), findsOneWidget);
     expect(find.text('Ganha em 2 de abr. de 2026'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Meia maratona'), 200);
     expect(find.text('Bloqueada · 10,4 de 21'), findsOneWidget);
-    expect(find.text('Bloqueada · 2 de 3'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -66,7 +65,7 @@ void main() {
     expect(find.text('Não foi possível carregar suas insígnias.'), findsOneWidget);
     await tester.tap(find.text('Tentar novamente'));
     await tester.pumpAndSettle();
-    expect(find.text('Ganhas · 2 de 5'), findsOneWidget);
+    expect(find.text('Ganhas · 2 de 3'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

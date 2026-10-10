@@ -88,29 +88,52 @@ const insigniasData = [
     'earned': false,
     'earned_at': null,
   },
-  {
-    'id': 'badge_nivel_3',
-    'name': 'Selo de bronze',
-    'description': 'Alcance o nível 3.',
-    'icon': 'level',
-    'metric': 'level',
-    'threshold': 3,
-    'progress': 2,
-    'earned': false,
-    'earned_at': null,
-  },
-  {
-    'id': 'badge_nivel_5',
-    'name': 'Selo de prata',
-    'description': 'Alcance o nível 5.',
-    'icon': 'level',
-    'metric': 'level',
-    'threshold': 5,
-    'progress': 2,
-    'earned': false,
-    'earned_at': null,
-  },
 ];
+
+/// Ligas: Turbo 2 com 1.230 RR — ladder mínima (a tela usa a entry atual).
+final leaguesData = {
+  'me': {
+    'trophies': 1230,
+    'league': 'turbo',
+    'name': 'Turbo',
+    'color': '#22D3EE',
+    'division': 2,
+    'rr': 30,
+    'rr_to_next': 70,
+    'next': {'league': 'turbo', 'name': 'Turbo', 'division': 3},
+  },
+  'ladder': [
+    {
+      'key': 'largada',
+      'name': 'Largada',
+      'color': '#8A94A6',
+      'shape': 'circle',
+      'tiers': [
+        {'division': 1, 'at': 0},
+        {'division': 2, 'at': 100},
+        {'division': 3, 'at': 200},
+      ],
+    },
+    {
+      'key': 'turbo',
+      'name': 'Turbo',
+      'color': '#22D3EE',
+      'shape': 'hexagon',
+      'tiers': [
+        {'division': 1, 'at': 1200},
+        {'division': 2, 'at': 1300},
+        {'division': 3, 'at': 1400},
+      ],
+    },
+    {
+      'key': 'lenda',
+      'name': 'Lenda',
+      'color': '#F472B6',
+      'shape': 'star',
+      'tiers': [{'division': null, 'at': 2100}],
+    },
+  ],
+};
 
 void main() {
   Future<void> open(
@@ -137,6 +160,9 @@ void main() {
         }
         if (request.url.path == '/badges') {
           return http.Response(jsonEncode(insigniasData), 200);
+        }
+        if (request.url.path == '/leagues') {
+          return http.Response(jsonEncode(leaguesData), 200);
         }
         return http.Response('{}', 404);
       }),
@@ -448,6 +474,9 @@ void main() {
         if (request.url.path == '/badges') {
           return http.Response(jsonEncode(insigniasData), 200);
         }
+        if (request.url.path == '/leagues') {
+          return http.Response(jsonEncode(leaguesData), 200);
+        }
         return http.Response('{}', 404);
       }),
     );
@@ -520,24 +549,34 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('level rewards are a static showcase and Insígnias leaves the '
-      'score history', (tester) async {
+  testWidgets('league card shows the current division and opens the ladder', (
+    tester,
+  ) async {
     await openIdentity(tester);
-    await tester.scrollUntilVisible(find.text('Recompensas de nível'), 300);
-    expect(find.text('Recompensas de nível'), findsOneWidget);
-    expect(
-      find.text('Selos concedidos pelo nível da conta, sem resgate.'),
-      findsOneWidget,
-    );
-    // Nível 2 na conta de teste: os selos de nível 3 e 5 aparecem bloqueados.
-    expect(find.text('Selo de bronze'), findsOneWidget);
-    expect(find.text('Selo de prata'), findsOneWidget);
-    expect(find.textContaining('Resgatar'), findsNothing);
+    await tester.scrollUntilVisible(find.text('TURBO 2'), 300);
+    expect(find.text('TURBO 2'), findsOneWidget);
+    expect(find.text('1.230 troféus (RR)'), findsOneWidget);
+    expect(find.text('Faltam 70 RR para Turbo 3'), findsOneWidget);
+    // Os selos de nível morreram: a escada de ligas ocupa o lugar deles.
+    expect(find.text('Recompensas de nível'), findsNothing);
 
+    await tester.tap(find.text('TURBO 2'));
+    await tester.pumpAndSettle();
+    expect(find.text('Ligas do RUNOVER'), findsOneWidget);
+    expect(find.text('LENDA'), findsOneWidget);
+    Navigator.of(tester.element(find.text('Ligas do RUNOVER'))).pop();
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Insígnias opens its own screen, not the score history', (
+    tester,
+  ) async {
+    await openIdentity(tester);
     await tester.scrollUntilVisible(find.text('Insígnias'), 300);
     await tester.tap(find.text('Insígnias'));
     await tester.pumpAndSettle();
-    expect(find.text('Ganhas · 2 de 5'), findsOneWidget);
+    expect(find.text('Ganhas · 2 de 3'), findsOneWidget);
     // Antes este item abria o histórico de pontos; as insígnias têm tela própria.
     expect(find.text('Histórico'), findsNothing);
     await tester.scrollUntilVisible(find.text('Meia maratona'), 200);

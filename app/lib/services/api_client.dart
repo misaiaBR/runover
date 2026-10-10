@@ -268,6 +268,11 @@ class ApiClient {
           .map((e) => Insignia.fromJson(Map<String, dynamic>.from(e)))
           .toList();
 
+  /// Ligas: escada da temporada + posição atual do jogador (RR).
+  Future<LeaguesResponse> getLeagues() async => LeaguesResponse.fromJson(
+    Map<String, dynamic>.from(await _request('GET', '/leagues')),
+  );
+
   /// Desativação temporária: a conta some e o login bloqueia, mas nada
   /// é apagado — volta com [reactivate].
   Future<void> deactivateAccount() async {

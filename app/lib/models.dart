@@ -418,7 +418,7 @@ class Insignia {
   final String id;
   final String name;
   final String description;
-  final String icon; // run | flag | route | team | level
+  final String icon; // run | flag | route | team
   final String metric;
   final double threshold;
   final double progress;
@@ -437,8 +437,6 @@ class Insignia {
     this.earnedAt,
   });
 
-  bool get isLevelReward => metric == 'level';
-
   factory Insignia.fromJson(Map<String, dynamic> j) => Insignia(
     id: '${j['id']}',
     name: '${j['name']}',
@@ -449,6 +447,114 @@ class Insignia {
     progress: (j['progress'] as num?)?.toDouble() ?? 0,
     earned: j['earned'] == true,
     earnedAt: j['earned_at'] == null ? null : DateTime.parse('${j['earned_at']}'),
+  );
+}
+
+/// Ligas competitivas (via API: GET /leagues): troféus (RR) ganhos em
+/// conquistas e perdidos em derrotas. A escada e os números da temporada
+/// vêm do servidor — o app só desenha.
+class LeagueNext {
+  final String league;
+  final String name;
+  final int? division; // null quando o próximo degrau é a Lenda
+
+  const LeagueNext({
+    required this.league,
+    required this.name,
+    required this.division,
+  });
+
+  factory LeagueNext.fromJson(Map<String, dynamic> j) => LeagueNext(
+    league: '${j['league']}',
+    name: '${j['name']}',
+    division: (j['division'] as num?)?.toInt(),
+  );
+}
+
+class LeagueStatus {
+  final int trophies;
+  final String league;
+  final String name;
+  final String color;
+  final int? division; // null = Lenda, que não tem divisões
+  final int rr;
+  final int? rrToNext;
+  final LeagueNext? next;
+
+  const LeagueStatus({
+    required this.trophies,
+    required this.league,
+    required this.name,
+    required this.color,
+    required this.division,
+    required this.rr,
+    required this.rrToNext,
+    required this.next,
+  });
+
+  factory LeagueStatus.fromJson(Map<String, dynamic> j) => LeagueStatus(
+    trophies: (j['trophies'] as num?)?.toInt() ?? 0,
+    league: '${j['league']}',
+    name: '${j['name']}',
+    color: '${j['color'] ?? '#8A94A6'}',
+    division: (j['division'] as num?)?.toInt(),
+    rr: (j['rr'] as num?)?.toInt() ?? 0,
+    rrToNext: (j['rr_to_next'] as num?)?.toInt(),
+    next: j['next'] == null
+        ? null
+        : LeagueNext.fromJson(Map<String, dynamic>.from(j['next'])),
+  );
+}
+
+class LeagueTier {
+  final int? division;
+  final int at;
+
+  const LeagueTier({required this.division, required this.at});
+
+  factory LeagueTier.fromJson(Map<String, dynamic> j) => LeagueTier(
+    division: (j['division'] as num?)?.toInt(),
+    at: (j['at'] as num?)?.toInt() ?? 0,
+  );
+}
+
+class LeagueEntry {
+  final String key;
+  final String name;
+  final String color;
+  final String shape; // circle | triangle | diamond | pentagon | hexagon | octagon | gem | star
+  final List<LeagueTier> tiers;
+
+  const LeagueEntry({
+    required this.key,
+    required this.name,
+    required this.color,
+    required this.shape,
+    required this.tiers,
+  });
+
+  factory LeagueEntry.fromJson(Map<String, dynamic> j) => LeagueEntry(
+    key: '${j['key']}',
+    name: '${j['name']}',
+    color: '${j['color'] ?? '#8A94A6'}',
+    shape: '${j['shape'] ?? 'circle'}',
+    tiers: ((j['tiers'] as List?) ?? const [])
+        .map((e) => LeagueTier.fromJson(Map<String, dynamic>.from(e)))
+        .toList(),
+  );
+}
+
+class LeaguesResponse {
+  final LeagueStatus me;
+  final List<LeagueEntry> ladder;
+
+  const LeaguesResponse({required this.me, required this.ladder});
+
+  factory LeaguesResponse.fromJson(Map<String, dynamic> j) => LeaguesResponse(
+    me: LeagueStatus.fromJson(Map<String, dynamic>.from(j['me'])),
+    ladder: ((j['ladder'] as List?) ?? const [])
+        .map((e) => LeagueEntry.fromJson(Map<String, dynamic>.from(e)))
+        .toList(),
   );
 }
 
