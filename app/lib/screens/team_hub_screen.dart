@@ -13,6 +13,7 @@ import '../widgets/centered_content.dart';
 import '../widgets/cosmetics.dart';
 import '../widgets/level_badge.dart';
 import 'app_footer.dart';
+import 'lightning_screen.dart';
 import 'team_shop_screen.dart';
 import 'teams_screen.dart';
 
@@ -28,6 +29,7 @@ class _TeamHubScreenState extends State<TeamHubScreen> {
   TeamDetail? _team;
   Map<String, dynamic>? _goal;
   List<ShopItem> _catalog = const [];
+  List<LightningBoard> _lightning = const [];
   bool _loading = true;
   final Set<String> _deciding = {};
 
@@ -59,11 +61,20 @@ class _TeamHubScreenState extends State<TeamHubScreen> {
     } catch (_) {
       catalog = const [];
     }
+    List<LightningBoard> lightning = const [];
+    if (team != null) {
+      try {
+        lightning = await api.listLightning(team.id);
+      } catch (_) {
+        lightning = const [];
+      }
+    }
     if (!mounted) return;
     setState(() {
       _team = team;
       _goal = goal;
       _catalog = catalog;
+      _lightning = lightning;
       _loading = false;
     });
   }
@@ -94,6 +105,7 @@ class _TeamHubScreenState extends State<TeamHubScreen> {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final team = _team;
+    final username = context.watch<AppState>().profile?.username;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Pit stop de equipe')),
@@ -148,6 +160,13 @@ class _TeamHubScreenState extends State<TeamHubScreen> {
                             _GoalCard(goal: _goal!),
                             const SizedBox(height: 16),
                           ],
+                          _LightningSection(
+                            team: team,
+                            sessions: _lightning,
+                            username: username,
+                            onChanged: _load,
+                          ),
+                          const SizedBox(height: 16),
                           Card(
                             child: ListTile(
                               leading: const Icon(
@@ -430,6 +449,193 @@ class _GoalCard extends StatelessWidget {
                     ],
                   ),
                 ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Dominação Relâmpago no hub: abrir (só adm), participar e histórico.
+///
+/// Sem sessão aberta, quem não é adm vê que precisa aguardar — só conta o
+/// laço de quem tocou em Participar.
+class _LightningSection extends StatefulWidget {
+  const _LightningSection({
+    required this.team,
+    required this.sessions,
+    required this.username,
+    required this.onChanged,
+  });
+
+  final TeamDetail team;
+  final List<LightningBoard> sessions;
+  final String? username;
+  final Future<void> Function() onChanged;
+
+  @override
+  State<_LightningSection> createState() => _LightningSectionState();
+}
+
+class _LightningSectionState extends State<_LightningSection> {
+  bool _busy = false;
+
+  LightningBoard? get _open {
+    for (final s in widget.sessions) {
+      if (s.open) return s;
+    }
+    return null;
+  }
+
+  List<LightningBoard> get _past =>
+      widget.sessions.where((s) => !s.open).take(3).toList();
+
+  Future<void> _openSession(int minutes) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await context.read<AppState>().api.openLightning(
+        widget.team.id,
+        minutes,
+      );
+      await widget.onChanged();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _join(String sessionId) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await context.read<AppState>().api.joinLightning(sessionId);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Você entrou no relâmpago!')),
+      );
+      await widget.onChanged();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _board(String sessionId) {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => LightningScreen(sessionId: sessionId)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final open = _open;
+    final joined =
+        open != null &&
+        widget.username != null &&
+        open.participants.contains(widget.username);
+    return Card(
+      color: Theme.of(context).colorScheme.surfaceContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.bolt_outlined),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'Dominação Relâmpago',
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            if (open == null) ...[
+              Text(
+                widget.team.isAdmin
+                    ? 'Partida curta de 15 ou 30 min. Só conta o laço de quem participar.'
+                    : 'Nenhum relâmpago aberto. Aguarde o adm abrir a partida.',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              if (widget.team.isAdmin) ...[
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _busy ? null : () => _openSession(15),
+                        icon: const Icon(Icons.flash_on_outlined),
+                        label: const Text('Abrir 15 min'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _busy ? null : () => _openSession(30),
+                        icon: const Icon(Icons.flash_on_outlined),
+                        label: const Text('Abrir 30 min'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ] else ...[
+              Text(
+                '${open.takes} tomadas · ${formatPoints(open.points)} pts · '
+                '${open.participants.length} participando',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  if (!joined)
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: _busy ? null : () => _join(open.id),
+                        icon: const Icon(Icons.directions_run),
+                        label: const Text('Participar'),
+                      ),
+                    ),
+                  if (!joined) const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _board(open.id),
+                      icon: const Icon(Icons.leaderboard_outlined),
+                      label: const Text('Ver placar'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            for (final past in _past) ...[
+              const Divider(height: 24),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.history),
+                title: Text(
+                  'Relâmpago ${past.durationMin} min · ${past.takes} tomadas',
+                ),
+                subtitle: Text(
+                  past.mvp == null
+                      ? '${formatPoints(past.points)} pts'
+                      : '${formatPoints(past.points)} pts · MVP @${past.mvp}',
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => _board(past.id),
+              ),
             ],
           ],
         ),

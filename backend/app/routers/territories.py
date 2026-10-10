@@ -434,6 +434,7 @@ def apply_claim(
         owner_team_id=team.id if team else None,
         points=points,
         conquered_at=claim_time,
+        runner_user_id=current_user.id,
     ))
 
     # Consome os spawns cobertos: somem para todo mundo.

@@ -389,6 +389,30 @@ class ApiClient {
     ),
   );
 
+  /// Dominação Relâmpago: só dono/admin abre (15 ou 30 min).
+  Future<LightningBoard> openLightning(String teamId, int minutes) async =>
+      LightningBoard.fromJson(
+        await _request('POST', '/teams/$teamId/lightning', {
+          'duration_min': minutes,
+        }),
+      );
+
+  /// Opt-in: o membro escolhe participar da partida aberta.
+  Future<LightningBoard> joinLightning(String sessionId) async =>
+      LightningBoard.fromJson(
+        await _request('POST', '/lightning/$sessionId/join'),
+      );
+
+  Future<LightningBoard> getLightning(String sessionId) async =>
+      LightningBoard.fromJson(await _request('GET', '/lightning/$sessionId'));
+
+  Future<List<LightningBoard>> listLightning(String teamId) async =>
+      ((await _request('GET', '/teams/$teamId/lightning')) as List)
+          .map(
+            (e) => LightningBoard.fromJson(Map<String, dynamic>.from(e)),
+          )
+          .toList();
+
   /// Convite por @usuário: o convite abre o pedido em nome de quem recebe, e é
   /// essa pessoa que aceita ou recusa — ninguém entra por cima dela.
   Future<TeamDetail> inviteTeammate(String teamId, String username) async =>

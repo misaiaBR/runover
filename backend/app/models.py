@@ -231,10 +231,49 @@ class TerritoryOwnership(Base):
     owner_team_id: Mapped[str | None] = mapped_column(ForeignKey("teams.id"), nullable=True)
     points: Mapped[int] = mapped_column(Integer, nullable=False)  # RN09
     conquered_at: Mapped[datetime] = mapped_column(DateTime, default=_now, index=True)
+    # Quem correu o laço — em conquista pela equipe, o dono é a equipe mas o
+    # corredor importa (placar do Relâmpago, MVP). Nulo em linhas antigas.
+    runner_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
 
     territory: Mapped["Territory"] = relationship(back_populates="ownerships")
-    owner_user: Mapped["User | None"] = relationship()
+    owner_user: Mapped["User | None"] = relationship(foreign_keys=[owner_user_id])
     owner_team: Mapped["Team | None"] = relationship()
+
+class LightningSession(Base):
+    """Dominação Relâmpago: partida curta da equipe, aberta por um admin.
+
+    Só contam os laços fechados na janela por quem optou por participar
+    (LightningParticipant). Sem cron: o primeiro GET após o fim finaliza de
+    forma idempotente (espólio único no cofre).
+    """
+
+    __tablename__ = "lightning_sessions"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    team_id: Mapped[str] = mapped_column(ForeignKey("teams.id"), nullable=False, index=True)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    duration_min: Mapped[int] = mapped_column(Integer, nullable=False)
+    starts_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+    ends_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    finalized: Mapped[bool] = mapped_column(Boolean, default=False)
+    bonus_points: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class LightningParticipant(Base):
+    """Opt-in: só o laço de quem está aqui conta no placar."""
+
+    __tablename__ = "lightning_participants"
+    __table_args__ = (
+        UniqueConstraint("session_id", "user_id", name="uq_lightning_entry"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    session_id: Mapped[str] = mapped_column(
+        ForeignKey("lightning_sessions.id"), nullable=False, index=True
+    )
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    joined_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
 class ConquestMark(Base):
