@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
-from app.models import Run, ScoreEvent, Territory, TerritoryOwnership, UserBadge
+from app.models import Run, Territory, TerritoryOwnership, UserBadge
 from app.services.badges import CATALOG
 from app.services.shop import CATALOG as SHOP_CATALOG
 
@@ -100,18 +100,6 @@ def test_conquest_and_team_rules(client, registered_user, db_session):
     assert badges["badge_primeira_conquista"]["earned"] is True
     assert badges["badge_cinco_conquistas"]["earned"] is False
     assert badges["badge_em_equipe"]["earned"] is False
-
-
-def test_level_badges_come_from_the_account_level(client, registered_user, db_session):
-    """As recompensas de nível são estáticas: liberam pelo nível, sem resgate."""
-    headers = _auth(registered_user)
-    user_id = _user_id(client, headers)
-    db_session.add(ScoreEvent(user_id=user_id, delta=450, reason="conquista"))
-    db_session.commit()
-    badges = _by_id(client.get("/badges", headers=headers).json())
-    assert badges["badge_nivel_3"]["earned"] is True
-    assert badges["badge_nivel_3"]["progress"] == 3
-    assert badges["badge_nivel_5"]["earned"] is False
 
 
 def test_level_badges_are_not_shop_or_pass_items(client):

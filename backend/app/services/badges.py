@@ -20,7 +20,6 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models import Run, TeamMember, TerritoryOwnership, User, UserBadge
-from app.services.scoring import level_info, total_score
 
 
 def _badge(
@@ -41,8 +40,8 @@ def _badge(
     }
 
 
-# As insígnias de `metric == "level"` são as recompensas estáticas de nível:
-# não cópias do passe nem da loja, e concedidas pela própria regra.
+# As recompensas de nível (selos) foram substituídas pelo sistema de ligas
+# (`app/services/leagues.py`): a escada competitiva vive lá, não no mural.
 CATALOG: list[dict] = [
     _badge("badge_primeira_corrida", "Primeira corrida", "Registre 1 corrida.", "run", "runs", 1),
     _badge("badge_cinco_corridas", "Cinco corridas", "Registre 5 corridas.", "run", "runs", 5),
@@ -54,10 +53,6 @@ CATALOG: list[dict] = [
     _badge("badge_meia_maratona", "Meia maratona", "Corra 21 km em uma única corrida.", "route", "longest_km", 21),
     _badge("badge_centenar", "100 km acumulados", "Some 100 km de corrida.", "route", "total_km", 100),
     _badge("badge_em_equipe", "Em uma equipe", "Participe de uma equipe.", "team", "team", 1),
-    _badge("badge_nivel_3", "Selo de bronze", "Alcance o nível 3.", "level", "level", 3),
-    _badge("badge_nivel_5", "Selo de prata", "Alcance o nível 5.", "level", "level", 5),
-    _badge("badge_nivel_10", "Selo de ouro", "Alcance o nível 10.", "level", "level", 10),
-    _badge("badge_nivel_15", "Selo de platina", "Alcance o nível 15.", "level", "level", 15),
 ]
 
 
@@ -83,7 +78,6 @@ def metric_values(db: Session, user_id: str) -> dict[str, float]:
         "conquests": conquests,
         "longest_km": round(longest / 1000, 2),
         "total_km": round(total / 1000, 2),
-        "level": level_info(total_score(db, user_id))[0],
         "team": 1 if in_team else 0,
     }
 
