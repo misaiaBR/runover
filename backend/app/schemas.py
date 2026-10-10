@@ -111,6 +111,12 @@ def validate_image_data_uri(value: str | None) -> str | None:
     return value
 
 
+# Presença: o servidor guarda a chave, o app dá nome e cor.
+# "ausente" continua contando como online; "nao_incomodar" deixa passar só o
+# risco de perda e os pedidos da equipe; "invisivel" some da contagem.
+PRESENCE_STATES = ("disponivel", "ausente", "nao_incomodar", "invisivel")
+
+
 class ProfileUpdateRequest(BaseModel):
     full_name: str | None = Field(default=None, min_length=2, max_length=120)
     username: str | None = Field(default=None, min_length=3, max_length=24)
@@ -125,6 +131,8 @@ class ProfileUpdateRequest(BaseModel):
     training_days: list[Literal["seg", "ter", "qua", "qui", "sex", "sab", "dom"]] | None = None
     activity_level: Literal["iniciante", "baixo_impacto", "moderado", "cardio"] | None = None
     mural_widgets: list[str] | None = None
+    # Presença (o pill do perfil): só os quatro estados conhecidos passam.
+    presence: Literal["disponivel", "ausente", "nao_incomodar", "invisivel"] | None = None
 
     @field_validator("photo_url")
     @classmethod
@@ -189,6 +197,12 @@ class UserProfile(UserPublic):
     is_public: bool  # RF05
     share_activities: bool = True
     pronouns: str | None = None
+    # Presença escolhida por quem corre. Só no próprio perfil: o pill do
+    # cabeçalho é uma preferência, não um dado público.
+    presence: str = "disponivel"
+    # Ponto verde do avatar: sinal vivo (batimento do app ou GPS) dentro da
+    # janela, e falso para quem está "invisivel".
+    online: bool = False
     coin_balance: int = 0
     equipped_cosmetics: list[str] = []
     play_seconds: int  # RF19 — tempo de jogo
@@ -242,6 +256,8 @@ class TeamMemberInfo(BaseModel):
     username: str
     photo_url: str | None
     is_admin: bool = False
+    # Sinal de atividade dentro da janela, descontando quem está "invisivel".
+    is_online: bool = False
 
 
 class TeamJoinRequestEntry(BaseModel):

@@ -30,6 +30,7 @@ from app.models import (
 )
 from app.schemas import HistoryEntry, ProfileUpdateRequest, UserProfile, UserPublic
 from app.services.leagues import badge_for
+from app.services.presence import is_online
 from app.services.scoring import (
     current_owner_territory_ids,
     level_info,
@@ -103,6 +104,9 @@ def get_my_profile(db: Session = Depends(get_db), current_user: User = Depends(g
         is_public=current_user.is_public,
         share_activities=current_user.share_activities,
         pronouns=current_user.pronouns,
+        presence=current_user.presence or "disponivel",
+        # O ponto verde do perfil: sinal vivo, descontando o "invisivel".
+        online=is_online(db, current_user.id),
         coin_balance=current_user.coin_balance,
         equipped_cosmetics=[
             item for item in (current_user.equipped_cosmetics or "").split(",") if item
@@ -140,6 +144,8 @@ def update_my_profile(
         current_user.share_activities = data.share_activities
     if "pronouns" in data.model_fields_set:
         current_user.pronouns = data.pronouns.strip() if data.pronouns else None
+    if data.presence is not None:
+        current_user.presence = data.presence
     if data.distance_units is not None:
         current_user.distance_units = data.distance_units
     if "weekly_frequency" in data.model_fields_set:
