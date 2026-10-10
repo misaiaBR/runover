@@ -45,6 +45,8 @@ class User(Base):
     play_seconds: Mapped[int] = mapped_column(Integer, default=0)  # RF19 — tempo de jogo acumulado
     # Mercado interno (moedas + cosméticos).
     coins_balance: Mapped[int] = mapped_column(Integer, default=0)
+    # Ligas competitivas: RR ganho em conquistas e perdido em derrotas/perdas.
+    trophies: Mapped[int] = mapped_column(Integer, default=0)
     equipped_avatar: Mapped[str | None] = mapped_column(String(64), nullable=True)
     equipped_frame: Mapped[str | None] = mapped_column(String(64), nullable=True)
     equipped_effect: Mapped[str | None] = mapped_column(String(64), nullable=True)

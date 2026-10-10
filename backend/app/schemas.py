@@ -638,3 +638,42 @@ class Badge(BaseModel):
     progress: float  # valor atual da métrica, para "3 de 10"
     earned: bool
     earned_at: datetime | None = None
+
+
+# ---------- Ligas (troféus competitivos por desempenho) ----------
+
+
+class LeagueNext(BaseModel):
+    league: str  # chave da liga em app/services/leagues.py
+    name: str
+    division: int | None  # None quando o próximo degrau é a Lenda
+
+
+class LeagueStatus(BaseModel):
+    trophies: int  # RR acumulado (piso em 0)
+    league: str
+    name: str
+    color: str  # cor oficial da liga, para o ícone
+    division: int | None  # None = Lenda, que não tem divisões
+    rr: int  # RR dentro da divisão atual
+    rr_to_next: int | None  # RR que falta para o próximo degrau
+    next: LeagueNext | None  # None quando já é a Lenda
+
+
+class LeagueTier(BaseModel):
+    division: int | None  # None = Lenda não tem divisões
+    at: int  # RR necessário para estar neste degrau
+
+
+class LeagueEntry(BaseModel):
+    key: str
+    name: str
+    color: str
+    shape: str  # forma desenhada no hexágono (lado do app)
+    tiers: list[LeagueTier]
+
+
+class LeaguesResponse(BaseModel):
+    me: LeagueStatus
+    ladder: list[LeagueEntry]
+
