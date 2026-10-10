@@ -45,8 +45,7 @@ Season seasonFromStatus(
   final tiers = (status['tiers'] as List? ?? const [])
       .whereType<Map>()
       .toList();
-  var pointsForNext =
-      (status['seasonal_points'] as num?)?.toInt() ?? 0;
+  var pointsForNext = (status['seasonal_points'] as num?)?.toInt() ?? 0;
   for (final tier in tiers) {
     if (tier['unlocked'] != true) {
       pointsForNext = (tier['threshold'] as num).toInt();
@@ -76,14 +75,13 @@ Season seasonFromStatus(
     points: (status['seasonal_points'] as num?)?.toInt() ?? 0,
     pointsForNext: pointsForNext,
     hasPass: status['premium_unlocked'] == true,
-    premiumPriceCoins:
-        (status['premium_price_coins'] as num?)?.toInt() ?? 0,
+    premiumPriceCoins: (status['premium_price_coins'] as num?)?.toInt() ?? 0,
     claimed: claimed,
   );
 }
 
-/// Rótulo da recompensa, igual ao da trilha antiga: moedas formatadas pt-BR
-/// mais o nome do item do catálogo.
+/// Rótulo da recompensa, igual ao da trilha antiga: dracmas formatadas em
+/// pt-BR mais o nome do item do catálogo.
 Reward _reward(
   Map? reward, {
   required bool premium,
@@ -91,15 +89,13 @@ Reward _reward(
 }) {
   final parts = <String>[];
   final coins = (reward?['coins'] as num?)?.toInt() ?? 0;
-  if (coins > 0) parts.add('+${formatPoints(coins)} 🪙');
+  if (coins > 0) parts.add('+${formatPoints(coins)} dracmas');
   final itemId = '${reward?['item_id'] ?? ''}';
   if (itemId.isNotEmpty) parts.add(names[itemId] ?? 'Exclusivo');
   return Reward(
     title: parts.isEmpty ? '—' : parts.join(' · '),
     icon: itemId.isEmpty
         ? Icons.monetization_on_outlined
-        : (premium
-              ? Icons.workspace_premium_outlined
-              : Icons.redeem),
+        : (premium ? Icons.workspace_premium_outlined : Icons.redeem),
   );
 }

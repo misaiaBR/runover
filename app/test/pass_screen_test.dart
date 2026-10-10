@@ -183,7 +183,7 @@ void main() {
     // A trilha horizontal: um nó por nível, rótulos fixos à esquerda.
     expect(find.text('Grátis'), findsOneWidget);
     expect(find.text('Passe'), findsOneWidget);
-    expect(find.text('+10 🪙'), findsOneWidget);
+    expect(find.text('+10 dracmas'), findsOneWidget);
     expect(find.text('Requer passe'), findsOneWidget);
     expect(find.text('Nível 2'), findsNWidgets(2));
 
