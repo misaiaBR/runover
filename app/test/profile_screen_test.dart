@@ -60,6 +60,7 @@ const insigniasData = [
     'name': 'Primeira corrida',
     'description': 'Registre 1 corrida.',
     'icon': 'run',
+    'category': 'corridas',
     'metric': 'runs',
     'threshold': 1,
     'progress': 12,
@@ -71,6 +72,7 @@ const insigniasData = [
     'name': '5 km em um laço',
     'description': 'Corra 5 km em uma única corrida.',
     'icon': 'route',
+    'category': 'distancia',
     'metric': 'longest_km',
     'threshold': 5,
     'progress': 10.4,
@@ -82,6 +84,7 @@ const insigniasData = [
     'name': 'Meia maratona',
     'description': 'Corra 21 km em uma única corrida.',
     'icon': 'route',
+    'category': 'distancia',
     'metric': 'longest_km',
     'threshold': 21,
     'progress': 10.4,
@@ -512,9 +515,6 @@ void main() {
       expect(find.text('🏆'), findsOneWidget);
       expect(find.text('⚡'), findsOneWidget);
       expect(find.text('Membro desde 6 de jun. de 2020'), findsOneWidget);
-      // O mural publica as insígnias ganhas (GET /badges), com a data do
-      // registro; "Primeira corrida" só aparece uma vez: no card de atividade,
-      // porque no mural o chip carrega a data no rótulo.
       // O mural publica as insígnias ganhas (GET /badges) como hexágonos com a
       // data do registro embaixo. "Primeira corrida" aparece duas vezes: uma no
       // mural, outra no card de atividade.
@@ -580,8 +580,12 @@ void main() {
     expect(find.text('Ganhas · 2 de 3'), findsOneWidget);
     // Antes este item abria o histórico de pontos; as insígnias têm tela própria.
     expect(find.text('Histórico'), findsNothing);
-    await tester.scrollUntilVisible(find.text('Meia maratona'), 200);
-    expect(find.text('Bloqueada · 10,4 de 21'), findsOneWidget);
+    // O card da mais perto de sair abre a tela: "Meia maratona" está bloqueada
+    // em 10,4 de 21, e a mesma insígnia se repete na grade por categoria.
+    expect(find.text('Bloqueada · Distância'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Por categoria'), 200);
+    expect(find.text('Meia maratona'), findsWidgets);
+    expect(find.text('10,4 de 21'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
 }
