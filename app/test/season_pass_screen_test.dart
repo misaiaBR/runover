@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:runover_app/screens/season_pass_screen.dart';
-import 'package:runover_app/season_pass/demo_season.dart';
 import 'package:runover_app/season_pass/models.dart';
 import 'package:runover_app/theme.dart';
+
+import 'season_pass_fixture.dart';
 
 Future<void> openSeason(
   WidgetTester tester, {

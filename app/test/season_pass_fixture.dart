@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:runover_app/season_pass/models.dart';
 
-import 'models.dart';
-
-/// Temporada de exemplo para visualizar o Passe de Temporada antes de ligar
-/// ao backend.
+/// Temporada de exemplo usada só pelos testes do Passe de Temporada.
 ///
 /// Nível 4 alcançado, faixas grátis dos níveis 1–3 já resgatadas e passe não
 /// adquirido — assim os quatro estados aparecem: resgatado (1–3 grátis),
 /// resgatável (4 grátis), requer passe (1–4 do passe) e bloqueado (5–7).
+///
+/// O que a tela mostra em produção vem de `GET /pass` (`season_pass/backend.dart`);
+/// nada aqui é catálogo do jogo.
 Season demoSeason() {
   return Season(
     name: 'Aurora',
@@ -19,7 +20,10 @@ Season demoSeason() {
     levels: const [
       SeasonLevel(
         level: 1,
-        free: Reward(title: '100 moedas', icon: Icons.monetization_on_outlined),
+        free: Reward(
+          title: '100 dracmas',
+          icon: Icons.monetization_on_outlined,
+        ),
         pass: Reward(
           title: 'Moldura de avatar',
           icon: Icons.account_circle_outlined,
@@ -28,10 +32,7 @@ Season demoSeason() {
       SeasonLevel(
         level: 2,
         free: Reward(title: 'Cor de zona', icon: Icons.hexagon_outlined),
-        pass: Reward(
-          title: 'Efeito de conquista',
-          icon: Icons.auto_awesome,
-        ),
+        pass: Reward(title: 'Efeito de conquista', icon: Icons.auto_awesome),
       ),
       SeasonLevel(
         level: 3,
@@ -43,12 +44,15 @@ Season demoSeason() {
       ),
       SeasonLevel(
         level: 4,
-        free: Reward(title: 'Baú de moedas', icon: Icons.redeem),
+        free: Reward(title: 'Baú de dracmas', icon: Icons.redeem),
         pass: Reward(title: 'Cor exclusiva', icon: Icons.palette_outlined),
       ),
       SeasonLevel(
         level: 5,
-        free: Reward(title: '300 moedas', icon: Icons.monetization_on_outlined),
+        free: Reward(
+          title: '300 dracmas',
+          icon: Icons.monetization_on_outlined,
+        ),
         pass: Reward(title: 'Moldura de equipe', icon: Icons.shield_outlined),
       ),
       SeasonLevel(
@@ -61,7 +65,7 @@ Season demoSeason() {
       ),
       SeasonLevel(
         level: 7,
-        free: Reward(title: 'Baú de moedas', icon: Icons.redeem),
+        free: Reward(title: 'Baú de dracmas', icon: Icons.redeem),
         pass: Reward(title: 'Base animada', icon: Icons.hexagon),
       ),
     ],
