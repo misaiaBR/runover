@@ -209,3 +209,42 @@ def wild_spawns_for(
             out.append(s)
     out.sort(key=lambda s: s["distance_m"])
     return out[:MAX_RESULTS]
+
+
+WELCOME_RADIUS_M = 500.0  # sem nada vivo até aqui, o novato ganha um spawn
+
+
+def welcome_spawn_for(
+    user_id: str, lat: float, lng: float, now: datetime
+) -> dict:
+    """Spawn de boas-vindas para quem ainda não tem nenhum território.
+
+    Comum, determinístico por usuário + hora UTC (gira junto com os demais) e
+    grudado na via mais próxima — sem rua por perto (ou com o Overpass fora),
+    cai num ponto determinístico a 100–300 m. O chamador decide quando
+    oferecer (bairro vazio); a chave entra no mesmo controle de consumo dos
+    demais spawns.
+    """
+    bucket = hour_bucket(now)
+    key = f"welcome:{user_id}:{bucket.strftime('%Y%m%d%H')}"
+    snapped = snap_to_street(lat, lng, key)
+    if snapped is not None:
+        s_lat, s_lng = snapped
+    else:
+        rng = _rng("welcome-spot", key)
+        bearing = rng.uniform(0, 2 * math.pi)
+        dist = rng.uniform(100, 300)
+        s_lat = lat + (dist / 111_320) * math.cos(bearing)
+        lng_scale = 111_320 * max(0.2, math.cos(math.radians(lat)))
+        s_lng = lng + (dist / lng_scale) * math.sin(bearing)
+    return {
+        "key": key,
+        "lat": s_lat,
+        "lng": s_lng,
+        "radius_m": 80,
+        "relevance": 1,
+        "rarity": "comum",
+        "spawned_at": bucket,
+        "expires_at": bucket + timedelta(hours=BUCKET_HOURS),
+        "distance_m": haversine_m(lat, lng, s_lat, s_lng),
+    }

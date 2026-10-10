@@ -35,13 +35,19 @@ from app.services.leagues import (
     loss_penalty,
 )
 from app.services.scoring import (
+    current_owner_territory_ids,
     current_ownerships,
     level_info,
     total_score,
     total_team_score,
     user_rank_positions,
 )
-from app.services.spawns import wild_spawns_for, wild_spawns_in_bounds
+from app.services.spawns import (
+    WELCOME_RADIUS_M,
+    welcome_spawn_for,
+    wild_spawns_for,
+    wild_spawns_in_bounds,
+)
 
 router = APIRouter(prefix="/territories", tags=["territórios"])
 
@@ -178,9 +184,13 @@ def wild_territories(
     lng: float = Query(ge=-180, le=180),
     radius_km: float = Query(2.0, gt=0, le=200),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
-    """Spawns selvagens ao redor — somem ao fim da hora ou quando conquistados."""
+    """Spawns selvagens ao redor — somem ao fim da hora ou quando conquistados.
+
+    Quem ainda não tem território e está num bairro vazio (nada vivo num
+    raio) ganha um spawn comum de boas-vindas por perto.
+    """
     now = datetime.now(timezone.utc)
     claimed = _live_spawn_keys(db, now)
     activity = [
@@ -192,6 +202,17 @@ def wild_territories(
             Territory.center_lng.isnot(None),
         ).all()
     ]
+    live = [
+        s
+        for s in wild_spawns_for(lat, lng, radius_km, now, activity=activity)
+        if s["key"] not in claimed
+    ]
+    if not current_owner_territory_ids(db, current_user.id):
+        nearest = min((s["distance_m"] for s in live), default=None)
+        if nearest is None or nearest > WELCOME_RADIUS_M:
+            welcome = welcome_spawn_for(current_user.id, lat, lng, now)
+            if welcome["key"] not in claimed:
+                live.append(welcome)
     return [
         WildSpawn(
             key=s["key"],
@@ -202,8 +223,7 @@ def wild_territories(
             spawned_at=s["spawned_at"],
             expires_at=s["expires_at"],
         )
-        for s in wild_spawns_for(lat, lng, radius_km, now, activity=activity)
-        if s["key"] not in claimed
+        for s in live
     ]
 
 

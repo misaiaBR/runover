@@ -9,9 +9,11 @@ import '../models.dart';
 import '../services/api_client.dart';
 import '../state/app_state.dart';
 import '../widgets/centered_content.dart';
+import '../widgets/play_mode_sheet.dart';
 import '../widgets/slanted_menu_icon.dart';
 import 'app_footer.dart';
 import 'map_screen.dart';
+import 'tracking_screen.dart';
 import 'notifications_screen.dart';
 import 'pass_screen.dart';
 import 'profile_screen.dart';
@@ -215,10 +217,26 @@ class _HomeScreenState extends State<HomeScreen> {
     return null;
   }
 
-  void _openMap() {
-    Navigator.of(
+  /// Jogar na Dominação começa pela escolha da mecânica — o mapa sozinho não
+  /// diz o que fazer. Laço livre pula o mapa e abre o tracking direto; as
+  /// outras duas passam pelo mapa já focado na mecânica (dica + camadas).
+  void _playDomination() {
+    showPlayModeSheet(
       context,
-    ).push(MaterialPageRoute(builder: (_) => const MapScreen()));
+      onSelect: (mode) {
+        switch (mode) {
+          case PlayMode.freeLoop:
+            Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const TrackingScreen()));
+          case PlayMode.huntWild:
+          case PlayMode.challenge:
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => MapScreen(focus: mode)),
+            );
+        }
+      },
+    );
   }
 
   Future<void> _openTeam() async {
@@ -274,7 +292,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
         tag: 'Em andamento',
         highlighted: true,
-        onPlay: _openMap,
+        onPlay: _playDomination,
       ),
       _GameMode(
         title: 'Desafio de velocidade',
