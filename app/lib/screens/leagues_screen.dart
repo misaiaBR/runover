@@ -96,10 +96,18 @@ class _LeaguesScreenState extends State<LeaguesScreen> {
                 const SizedBox(height: 20),
                 LayoutBuilder(
                   builder: (context, constraints) {
-                    final scale = (constraints.maxWidth / _boardWidth)
-                        .clamp(0.55, 1.0);
-                    return Center(
-                      child: _LadderBoard(data: data, scale: scale),
+                    final scale =
+                        (constraints.maxWidth / _boardWidth(data.ladder)).clamp(
+                          0.55,
+                          1.0,
+                        );
+                    return SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      // Em telas estreitas a escala tem piso: a escada passa a
+                      // rolar na horizontal em vez de cortar as últimas ligas.
+                      child: Center(
+                        child: _LadderBoard(data: data, scale: scale),
+                      ),
                     );
                   },
                 ),
@@ -220,10 +228,19 @@ class _MeCard extends StatelessWidget {
   }
 }
 
-const double _boardWidth = 8 * _cellWidth;
 const double _cellWidth = 104;
 const double _hexSize = 68;
 const double _rowLabelWidth = 26;
+
+/// Colunas do tabuleiro: as ligas com divisões mais a Lenda, que é sempre
+/// uma coluna própria mesmo quando o servidor ainda não a devolveu.
+int _boardColumns(List<LeagueEntry> ladder) =>
+    ladder.where((l) => l.key != 'lenda').length + 1;
+
+/// Largura real do tabuleiro em escala 1: a coluna de rótulos das linhas
+/// soma às células — sem ela o cabeçalho e cada linha estouram a largura.
+double _boardWidth(List<LeagueEntry> ladder) =>
+    _rowLabelWidth + _boardColumns(ladder) * _cellWidth;
 
 /// A escada em si: colunas por liga, linhas da divisão 3 (topo) à 1,
 /// Lenda sozinha na última coluna. Degraus acima do saldo ficam apagados.
@@ -291,7 +308,7 @@ class _LadderBoard extends StatelessWidget {
     }
 
     return SizedBox(
-      width: _boardWidth * _s,
+      width: _boardWidth(data.ladder) * _s,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -311,8 +328,7 @@ class _LadderBoard extends StatelessWidget {
                         fontWeight: FontWeight.w800,
                         letterSpacing: 0.8,
                         color: _parseColor(league.color).withValues(
-                          alpha:
-                                  data.me.league == league.key ? 1.0 : 0.55,
+                          alpha: data.me.league == league.key ? 1.0 : 0.55,
                         ),
                       ),
                     ),
@@ -337,9 +353,7 @@ class _LadderBoard extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 13 * _s,
                         fontWeight: FontWeight.w700,
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.onSurfaceVariant,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                     ),
                   ),
