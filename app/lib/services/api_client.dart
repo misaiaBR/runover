@@ -184,6 +184,13 @@ class ApiClient {
 
   Future<UserProfile> getMyProfile() async =>
       UserProfile.fromJson(await _request('GET', '/users/me'));
+
+  /// Presença do pill do perfil: grava só a chave escolhida (o servidor usa a
+  /// presença da chave no PATCH, então nada mais do perfil é tocado).
+  Future<void> setPresence(String presence) async {
+    await _request('PATCH', '/users/me', {'presence': presence});
+  }
+
   Future<UserProfile> updateProfile({
     String? fullName,
     String? username,

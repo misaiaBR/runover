@@ -7,11 +7,13 @@ import 'package:http/testing.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:runover_app/models.dart';
+import 'package:runover_app/screens/app_footer.dart';
 import 'package:runover_app/screens/profile_screen.dart';
 import 'package:runover_app/services/api_client.dart';
 import 'package:runover_app/state/app_state.dart';
 import 'package:runover_app/theme.dart';
 import 'package:runover_app/widgets/cosmetics.dart';
+import 'package:runover_app/widgets/presence.dart';
 import 'package:runover_app/widgets/profile_activity.dart';
 
 const profileData = {
@@ -654,6 +656,132 @@ void main() {
     await tester.scrollUntilVisible(find.text('Por categoria'), 200);
     expect(find.text('Meia maratona'), findsWidgets);
     expect(find.text('10,4 de 21'), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
+  /// O pill de presença vive no cartão de identidade: escolher um estado grava a
+  /// chave no servidor, e o rótulo volta do GET /users/me. Devolve a leitura do
+  /// último corpo do PATCH para o teste conferir o que foi enviado.
+  Future<Map<String, dynamic>? Function()> openPresence(
+    WidgetTester tester, {
+    String presence = 'disponivel',
+    bool online = false,
+  }) async {
+    tester.view.physicalSize = const Size(1440, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    Map<String, dynamic>? patched;
+    var saved = presence;
+    Map<String, dynamic> payload() => {
+      ...profileData,
+      'presence': saved,
+      'online': online,
+    };
+    final api = ApiClient(
+      client: MockClient((request) async {
+        if (request.url.path == '/runs/progress') {
+          return http.Response(jsonEncode(progressData), 200);
+        }
+        if (request.method == 'PATCH' && request.url.path == '/users/me') {
+          patched = jsonDecode(request.body) as Map<String, dynamic>;
+          saved = patched!['presence'] as String;
+          return http.Response(jsonEncode(payload()), 200);
+        }
+        if (request.url.path == '/users/me') {
+          return http.Response(jsonEncode(payload()), 200);
+        }
+        return http.Response('{}', 404);
+      }),
+    );
+    addTearDown(api.close);
+    final state = AppState(api: api)
+      ..profile = UserProfile.fromJson(payload());
+    addTearDown(state.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: state,
+        child: MaterialApp(
+          theme: buildRunoverTheme(),
+          home: const ProfileScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    return () => patched;
+  }
+
+  testWidgets('the pill shows the chosen state with a live dot', (
+    tester,
+  ) async {
+    await openPresence(tester, presence: 'nao_incomodar', online: true);
+    expect(find.text('Não perturbe'), findsOneWidget);
+    expect(tester.getSize(find.byType(PresenceDot)), const Size(14, 14));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('without a live signal the dot stays hidden', (tester) async {
+    await openPresence(tester);
+    expect(find.text('Disponível'), findsOneWidget);
+    // Sem sinal vivo o servidor devolve online=false e o ponto não aparece:
+    // o estado escolhido não é prova de atividade.
+    expect(tester.getSize(find.byType(PresenceDot)), Size.zero);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the pill opens the four states with what each one changes', (
+    tester,
+  ) async {
+    await openPresence(tester);
+    await tester.tap(find.text('Disponível'));
+    await tester.pumpAndSettle();
+    expect(find.text('Mostrar-me como'), findsOneWidget);
+    expect(find.text('Ausente'), findsOneWidget);
+    expect(find.text('Não perturbe'), findsOneWidget);
+    expect(find.text('Invisível'), findsOneWidget);
+    expect(
+      find.text('Você some da contagem de online da equipe.'),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('choosing a state sends only the presence key', (tester) async {
+    final lastPatch = await openPresence(tester);
+    await tester.tap(find.text('Disponível'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Invisível'));
+    await tester.pumpAndSettle();
+    // Nada mais do perfil é tocado pelo pill.
+    expect(lastPatch(), {'presence': 'invisivel'});
+    expect(find.text('Invisível'), findsOneWidget);
+    expect(find.text('Disponível'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('presence lives in the identity card and never the footer', (
+    tester,
+  ) async {
+    await openPresence(tester, online: true);
+    // A presença é uma escolha de quem corre, exibida junto do nome. O rodapé
+    // do app continua sem nada dela.
+    expect(
+      find.descendant(
+        of: find.byType(AppFooter),
+        matching: find.byType(PresencePill),
+      ),
+      findsNothing,
+    );
+    expect(
+      find.descendant(
+        of: find.byType(AppFooter),
+        matching: find.byType(PresenceDot),
+      ),
+      findsNothing,
+    );
+    final pill = tester.getTopLeft(find.byType(PresencePill));
+    final name = tester.getTopLeft(find.text('Marina Oliveira'));
+    expect(pill.dy, greaterThan(name.dy));
     expect(tester.takeException(), isNull);
   });
 }

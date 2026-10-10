@@ -14,6 +14,7 @@ import '../widgets/cosmetics.dart';
 import '../widgets/insignia.dart';
 import '../widgets/league_emblem.dart';
 import '../widgets/level_badge.dart';
+import '../widgets/presence.dart';
 import 'badges_screen.dart';
 import 'leagues_screen.dart';
 import 'season_pass_screen.dart';
@@ -116,6 +117,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<LeaguesResponse?>? _leagues;
   Future<Map<String, dynamic>?>? _pass;
   bool _photoBusy = false;
+  bool _presenceBusy = false;
 
   @override
   void didChangeDependencies() {
@@ -247,6 +249,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _photoBusy = false);
+    }
+  }
+
+  /// O pill de presença fica só no perfil. Escolher um estado grava a chave no
+  /// servidor e recarrega o perfil, que é de onde vêm o ponto verde e o rótulo.
+  Future<void> _choosePresence() async {
+    if (_presenceBusy) return;
+    final app = context.read<AppState>();
+    final current = app.profile;
+    if (current == null) return;
+    final key = await showPresencePicker(context, current.presence);
+    if (key == null || key == current.presence || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _presenceBusy = true);
+    try {
+      await app.api.setPresence(key);
+      await app.refreshProfile();
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _presenceBusy = false);
     }
   }
 
@@ -439,19 +462,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                         onTap: _photoBusy
                                             ? null
                                             : _showPhotoOptions,
-                                        child: FramedAvatar(
-                                          radius: 40,
-                                          image: profileAvatarImage(
-                                            profile.photoUrl,
-                                            avatarItem,
-                                            seed: profile.username,
-                                          ),
-                                          fallbackLetter:
-                                              profile.username.isEmpty
-                                              ? '?'
-                                              : profile.username[0],
-                                          frame: frame,
-                                          avatarItem: avatarItem,
+                                        child: Stack(
+                                          clipBehavior: Clip.none,
+                                          children: [
+                                            FramedAvatar(
+                                              radius: 40,
+                                              image: profileAvatarImage(
+                                                profile.photoUrl,
+                                                avatarItem,
+                                                seed: profile.username,
+                                              ),
+                                              fallbackLetter:
+                                                  profile.username.isEmpty
+                                                  ? '?'
+                                                  : profile.username[0],
+                                              frame: frame,
+                                              avatarItem: avatarItem,
+                                            ),
+                                            // O ponto verde é o sinal vivo que o
+                                            // servidor calcula (batimento + GPS),
+                                            // não o estado escolhido no pill.
+                                            Positioned(
+                                              right: 2,
+                                              bottom: 2,
+                                              child: PresenceDot(
+                                                visible: profile.online,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
                                     ),
@@ -527,6 +565,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       ),
                                     ),
                                 ],
+                              ),
+                              const SizedBox(height: 10),
+                              // O pill de presença fica no cartão de identidade,
+                              // e não no rodapé: tocar aqui abre os quatro estados.
+                              PresencePill(
+                                state: presenceOf(profile.presence),
+                                onTap: _presenceBusy ? () {} : _choosePresence,
                               ),
                               if (profile.equippedEmoticons.isNotEmpty) ...[
                                 const SizedBox(height: 8),

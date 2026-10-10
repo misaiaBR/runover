@@ -166,6 +166,10 @@ class UserProfile {
   final bool isPublic; // RF05
   final bool shareActivities;
   final String? pronouns;
+  // Presença: a chave escolhida por quem corre (o pill do perfil) e o ponto
+  // verde, que o servidor calcula a partir do batimento do app e do GPS.
+  final String presence;
+  final bool online;
   final int coinBalance;
   final int playSeconds; // RF19 — tempo de jogo
   // Preferências de treino (privadas, editáveis no perfil)
@@ -200,6 +204,8 @@ class UserProfile {
     required this.isPublic,
     required this.shareActivities,
     this.pronouns,
+    this.presence = 'disponivel',
+    this.online = false,
     this.coinBalance = 0,
     required this.playSeconds,
     this.distanceUnits = 'km',
@@ -240,6 +246,8 @@ class UserProfile {
     isPublic: j['is_public'] ?? true,
     shareActivities: j['share_activities'] ?? true,
     pronouns: j['pronouns'],
+    presence: '${j['presence'] ?? 'disponivel'}',
+    online: j['online'] == true,
     coinBalance: j['coin_balance'] ?? 0,
     playSeconds: j['play_seconds'] ?? 0,
     distanceUnits: j['distance_units'] ?? 'km',
