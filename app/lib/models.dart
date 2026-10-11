@@ -170,7 +170,6 @@ class UserProfile {
   // verde, que o servidor calcula a partir do batimento do app e do GPS.
   final String presence;
   final bool online;
-  final int coinBalance;
   final int playSeconds; // RF19 — tempo de jogo
   // Preferências de treino (privadas, editáveis no perfil)
   final String distanceUnits; // "km" | "mi"
@@ -206,7 +205,6 @@ class UserProfile {
     this.pronouns,
     this.presence = 'disponivel',
     this.online = false,
-    this.coinBalance = 0,
     required this.playSeconds,
     this.distanceUnits = 'km',
     this.weeklyFrequency,
@@ -248,7 +246,6 @@ class UserProfile {
     pronouns: j['pronouns'],
     presence: '${j['presence'] ?? 'disponivel'}',
     online: j['online'] == true,
-    coinBalance: j['coin_balance'] ?? 0,
     playSeconds: j['play_seconds'] ?? 0,
     distanceUnits: j['distance_units'] ?? 'km',
     weeklyFrequency: j['weekly_frequency'],
@@ -355,7 +352,7 @@ class ShopItem {
   final String category;
   final String name;
   final int price;
-  final String scope; // "user" | "team" (loja da equipe, preços altos)
+  final String scope; // "user" | "team" (cofre da equipe) | "pass" (resgate)
   final Map<String, dynamic> payload;
 
   const ShopItem({

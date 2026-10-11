@@ -48,7 +48,6 @@ class User(Base):
     last_seen_at: Mapped[datetime | None] = mapped_column(
         DateTime, nullable=True, index=True
     )
-    coin_balance: Mapped[int] = mapped_column(Integer, default=0)
     equipped_cosmetics: Mapped[str] = mapped_column(String, default="")
     daily_mission_date: Mapped[str | None] = mapped_column(String(10), nullable=True)
     daily_mission_claimed: Mapped[bool] = mapped_column(default=False)

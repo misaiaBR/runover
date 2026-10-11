@@ -152,6 +152,9 @@ def equip(
     item = get_item(data.item_id)
     if item is None or item["category"] != category:
         raise HTTPException(404, "Item não encontrado nesta categoria.")
+    # Só a loja do usuário e o passe equipam aqui: itens da equipe têm o
+    # fluxo próprio do cofre. Itens do passe nunca são concedidos de graça —
+    # só o resgate (POST /pass/claim) entrega; sem ele, nem equipa.
     if item.get("scope", "user") not in ("user", "pass"):
         raise HTTPException(404, "Item não encontrado nesta categoria.")
     owned = (
@@ -159,6 +162,8 @@ def equip(
         .filter(UserItem.user_id == user.id, UserItem.item_id == item["id"])
         .first()
     )
+    if owned is None and item.get("scope", "user") == "pass":
+        raise HTTPException(404, "Item não encontrado nesta categoria.")
     if owned is None and item["price"] != 0:
         raise HTTPException(403, "Compre o item antes de equipar.")
     if owned is None and item["price"] == 0:
@@ -179,6 +184,8 @@ def _equip_emoticons(db: Session, user: User, item_id: str | None) -> Inventory:
         return _inventory_of(db, user)
     item = get_item(item_id)
     if item is None or item["category"] != "emoticon":
+        raise HTTPException(404, "Item não encontrado nesta categoria.")
+    if item.get("scope", "user") != "user":
         raise HTTPException(404, "Item não encontrado nesta categoria.")
     owned = (
         db.query(UserItem)

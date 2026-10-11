@@ -132,4 +132,29 @@ void main() {
     expect(timeUntilMidnight(DateTime(2026, 10, 4, 23, 59)), '1min');
     expect(dayKey(DateTime(2026, 1, 5)), '2026-01-05');
   });
+
+  test('pace ignores GPS-noise stubs below one lap', () {
+    // 50 m em 15 s dariam 5 min/km — ritmo "épico" sem correr de verdade.
+    final summary = summarizeDay([
+      {
+        'started_at': DateTime(2026, 10, 4, 7, 30).toUtc().toIso8601String(),
+        'distance_m': 50,
+        'duration_seconds': 15,
+      },
+    ], DateTime(2026, 10, 4));
+    expect(summary.fastestPaceMinKm, isNull);
+  });
+
+  test('draw with no slots returns empty instead of throwing', () {
+    expect(
+      drawDailyChallenges(
+        username: 'marina',
+        date: DateTime(2026, 10, 4),
+        weeklyKm: 10,
+        longestKm: 5,
+        count: 0,
+      ),
+      isEmpty,
+    );
+  });
 }

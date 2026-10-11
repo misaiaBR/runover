@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../format.dart';
 import '../models.dart';
 
 /// Cartão de progresso da temporada: nível atual, pontos acumulados até o
@@ -46,7 +47,8 @@ class SeasonPassProgressCard extends StatelessWidget {
                     fit: BoxFit.scaleDown,
                     alignment: Alignment.centerRight,
                     child: Text(
-                      '${season.points} / ${season.pointsForNext} pts',
+                      '${formatPoints(season.points)} / '
+                      '${formatPoints(season.pointsForNext)} pts',
                       style: TextStyle(color: scheme.onSurfaceVariant),
                     ),
                   ),
@@ -66,7 +68,8 @@ class SeasonPassProgressCard extends StatelessWidget {
             if (season.pointsToNextLevel > 0) ...[
               const SizedBox(height: 8),
               Text(
-                'Faltam ${season.pointsToNextLevel} pts para o nível '
+                'Faltam ${formatPoints(season.pointsToNextLevel)} pts '
+                'para o nível '
                 '${season.currentLevel + 1}',
                 style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
               ),

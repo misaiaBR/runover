@@ -71,7 +71,11 @@ def _owner_fields(owner: TerritoryOwnership | None) -> tuple[str | None, str | N
         return None, None
     if owner.owner_team_id:
         return "team", owner.owner_team.name
-    return "user", owner.owner_user.username
+    if owner.owner_user_id:
+        return "user", owner.owner_user.username
+    # Posse liberada (equipe dissolvida ou conta excluída anulou o dono sem
+    # apagar a linha): trata como sem dono em vez de estourar.
+    return None, None
 
 
 def _current_mark(db: Session, territory_id: str) -> ConquestMark | None:
@@ -107,7 +111,7 @@ def _to_summary(t: Territory, owner: TerritoryOwnership | None, takeovers: int =
         coordinates=polygon_to_latlng(t.geojson),
         center={"lat": lat, "lng": lng},
         radius_m=t.radius_m,
-        status="conquistado" if owner else "disponivel",  # RF07 / enum `status` do diagrama de classes
+        status="conquistado" if owner_type else "disponivel",  # RF07 / enum `status` do diagrama de classes
         owner_type=owner_type,
         owner_display=owner_display,
         takeovers=takeovers,
@@ -174,9 +178,14 @@ def nearby_territories(
 
 
 def _live_spawn_keys(db: Session, now: datetime) -> set[str]:
+    # A coluna é timestamp sem fuso: o corte também é naive em UTC.
+    cutoff = (now - timedelta(hours=2)).replace(tzinfo=None)
     db.query(SpawnClaim).filter(
-        SpawnClaim.claimed_at < now - timedelta(hours=2)
+        SpawnClaim.claimed_at < cutoff
     ).delete(synchronize_session=False)
+    # Flush, não commit: quem chama pode estar no meio de outra transação
+    # (o resgate grava posse, marca e consumo de spawn de uma vez).
+    db.flush()
     return {row[0] for row in db.query(SpawnClaim.spawn_key).all()}
 
 
@@ -254,12 +263,15 @@ def get_territory(territory_id: str, db: Session = Depends(get_db), _: User = De
     for o in previous:
         if owner and o.id == owner.id:
             continue
-        owner_type, owner_display = _owner_fields(o)
-        history.append({"owner_type": owner_type, "owner_display": owner_display, "conquered_at": o.conquered_at})
+        o_type, o_display = _owner_fields(o)
+        # Posse liberada não é "dono anterior" — e o schema exige dono.
+        if o_type is None:
+            continue
+        history.append({"owner_type": o_type, "owner_display": o_display, "conquered_at": o.conquered_at})
     return TerritoryDetail(
         **summary.model_dump(),
-        conquered_at=owner.conquered_at if owner else None,
-        points_value=owner.points if owner else round(settings.base_conquest_points * t.relevance),
+        conquered_at=owner.conquered_at if summary.owner_type else None,
+        points_value=owner.points if (owner and summary.owner_type) else round(settings.base_conquest_points * t.relevance),
         history=history,
         owner_pace_seconds_per_km=mark.pace_seconds_per_km if mark else None,
         owner_distance_m=mark.distance_m if mark else None,
@@ -479,6 +491,8 @@ def apply_claim(
         if latest_claim_at.tzinfo is None:
             latest_claim_at = latest_claim_at.replace(tzinfo=timezone.utc)
         claim_time = max(claim_time, latest_claim_at + timedelta(microseconds=1))
+    # As colunas são timestamp sem fuso: grava naive em UTC, o padrão do banco.
+    claim_naive = claim_time.replace(tzinfo=None)
     db.add(TerritoryOwnership(
         territory_id=territory.id,
         owner_user_id=None if team else current_user.id,
@@ -493,7 +507,7 @@ def apply_claim(
         db.add(SpawnClaim(
             spawn_key=s["key"],
             territory_id=territory.id,
-            claimed_at=claim_time,
+            claimed_at=claim_naive,
         ))
 
     # Marca do novo dono: ritmo e distância do laço que conquistou.

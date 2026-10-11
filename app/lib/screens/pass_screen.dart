@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../format.dart';
 import '../state/app_state.dart';
 import 'season_pass_screen.dart';
 
@@ -158,7 +159,19 @@ class PassSummary extends StatelessWidget {
     final nextAt = next.isEmpty
         ? null
         : (next.first['threshold'] as num).toInt();
-    final progress = nextAt == null ? 1.0 : (points / nextAt).clamp(0.0, 1.0);
+    // Mesma régua da trilha (Season.levelProgress): só conta os pontos
+    // ganhos desde que o último nível abriu, não o total acumulado.
+    final opened = tiers.where((t) => (t['unlocked'] as bool?) == true);
+    final levelStart = opened.isEmpty
+        ? 0
+        : (opened.last['threshold'] as num).toInt();
+    final nextTier = next.isEmpty
+        ? (unlocked + 1)
+        : ((next.first['tier'] as num?)?.toInt() ?? (unlocked + 1));
+    final missing = nextAt == null ? 0 : nextAt - points;
+    final progress = nextAt == null || nextAt <= levelStart
+        ? 1.0
+        : ((points - levelStart) / (nextAt - levelStart)).clamp(0.0, 1.0);
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -209,7 +222,7 @@ class PassSummary extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            '${fmt(points)} XP · tier $unlocked de ${tiers.length} · $endsAt',
+            '${formatPoints(points)} XP · tier $unlocked de ${tiers.length} · $endsAt',
             style: const TextStyle(fontSize: 13, color: Colors.white70),
           ),
           const SizedBox(height: 10),
@@ -225,7 +238,7 @@ class PassSummary extends StatelessWidget {
           if (nextAt != null) ...[
             const SizedBox(height: 6),
             Text(
-              'Faltam ${fmt(nextAt - points)} XP para o tier ${unlocked + 1}',
+              'Faltam ${formatPoints(missing < 0 ? 0 : missing)} XP para o tier $nextTier',
               style: const TextStyle(fontSize: 12, color: Colors.white70),
             ),
           ],
@@ -304,9 +317,6 @@ mixin AccountWatcher<T extends StatefulWidget> on State<T> {
   }
 }
 
-String fmt(int n) =>
-    n.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => '.');
-
 const _months = [
   '',
   'janeiro',
@@ -334,12 +344,5 @@ String seasonLabel(String seasonId) {
 String countdown(String? endsAt) {
   final end = DateTime.tryParse(endsAt ?? '');
   if (end == null) return '';
-  final left = end.difference(DateTime.now().toUtc());
-  if (left.isNegative) return 'Temporada encerrada';
-  final days = left.inDays;
-  final hours = left.inHours % 24;
-  if (days > 0) return 'Termina em $days d $hours h';
-  final minutes = left.inMinutes % 60;
-  if (hours > 0) return 'Termina em $hours h $minutes min';
-  return 'Termina em $minutes min';
+  return formatCountdown(end.difference(DateTime.now().toUtc()));
 }

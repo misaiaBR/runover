@@ -81,14 +81,9 @@ CATALOG: list[dict] = [
 ]
 
 
-def _week_start(now: datetime) -> datetime:
-    """Segunda 00:00 da semana-corrida, no mesmo UTC naive das colunas."""
-    return (now - timedelta(days=now.weekday())).replace(
-        hour=0, minute=0, second=0, microsecond=0
-    )
-
-
-def metric_values(db: Session, user_id: str) -> dict[str, float]:
+def metric_values(
+    db: Session, user_id: str, utc_offset_minutes: int = 0
+) -> dict[str, float]:
     """O valor atual de cada métrica do catálogo, calculado na hora."""
     runs = db.query(Run).filter(Run.user_id == user_id)
     count, longest, total = runs.with_entities(
@@ -104,11 +99,16 @@ def metric_values(db: Session, user_id: str) -> dict[str, float]:
     )
     team = user_team(db, user_id)
     # Pit stop: a meta semanal é da equipe inteira — os km somados na semana
-    # sob a bandeira dela, não os do corredor. A semana é a de UTC, o padrão
-    # das regras periódicas do servidor (a temporada do passe é igual).
+    # sob a bandeira dela, não os do corredor. A semana é a do fuso do
+    # aparelho (a mesma de `GET /runs/progress`); sem fuso informado, UTC.
     pit_stop = 0
     if team is not None:
-        week_start = _week_start(_utc_naive())
+        user_timezone = timezone(timedelta(minutes=utc_offset_minutes))
+        local_now = datetime.now(timezone.utc).astimezone(user_timezone)
+        local_start = (local_now - timedelta(days=local_now.weekday())).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        week_start = local_start.astimezone(timezone.utc).replace(tzinfo=None)
         team_km = (
             db.query(func.coalesce(func.sum(Run.distance_m), 0))
             .filter(
@@ -173,7 +173,9 @@ def _grant(db: Session, user_id: str, badge_id: str) -> datetime:
     return _as_utc(moment)
 
 
-def list_badges(db: Session, user: User) -> list[dict]:
+def list_badges(
+    db: Session, user: User, utc_offset_minutes: int = 0
+) -> list[dict]:
     """Catálogo completo com estado, progresso e data; grava o que é novo.
 
     O app não tem botão de resgate: consultar já concede o que a regra
@@ -182,7 +184,7 @@ def list_badges(db: Session, user: User) -> list[dict]:
 
     Só escreve e faz `flush`: quem chama decide quando a transação fecha.
     """
-    values = metric_values(db, user.id)
+    values = metric_values(db, user.id, utc_offset_minutes)
     earned_at = {
         row.badge_id: _as_utc(row.earned_at)
         for row in db.query(UserBadge).filter(UserBadge.user_id == user.id).all()

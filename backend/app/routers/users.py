@@ -107,7 +107,6 @@ def get_my_profile(db: Session = Depends(get_db), current_user: User = Depends(g
         presence=current_user.presence or "disponivel",
         # O ponto verde do perfil: sinal vivo, descontando o "invisivel".
         online=is_online(db, current_user.id),
-        coin_balance=current_user.coin_balance,
         equipped_cosmetics=[
             item for item in (current_user.equipped_cosmetics or "").split(",") if item
         ],
@@ -341,7 +340,6 @@ def export_my_data(
             "is_public": current_user.is_public,
             "share_activities": current_user.share_activities,
             "pronouns": current_user.pronouns,
-            "coin_balance": current_user.coin_balance,
             "equipped_cosmetics": [
                 item for item in (current_user.equipped_cosmetics or "").split(",") if item
             ],

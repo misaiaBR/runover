@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import get_db, lock_mutations
 from app.core.security import create_access_token, hash_password, verify_password
-from app.models import AuthAttempt, OAuthIdentity, PasswordReset, PasswordResetToken, User
+from app.models import AuthAttempt, OAuthIdentity, PasswordResetToken, User
 from app.schemas import ForgotPasswordRequest, LoginRequest, OAuthLoginRequest, RegisterRequest, ResetPasswordRequest, TokenResponse
 from app.services.oauth import create_unique_username, verify_identity
 from app.services.usernames import username_taken
@@ -98,6 +98,7 @@ def reactivate(data: LoginRequest, request: Request, db: Session = Depends(get_d
         raise HTTPException(401, "E-mail ou senha incorretos.")
     if user.is_active:
         raise HTTPException(400, "Esta conta já está ativa. Entre normalmente.")
+    lock_mutations(db)
     user.is_active = True
     user.deactivated_at = None
     db.commit()
@@ -259,22 +260,6 @@ def reset_password(data: ResetPasswordRequest, request: Request, db: Session = D
     if not throttle(db, "reset-use:" + client_key(request), 20):
         raise HTTPException(429, "Muitas tentativas. Aguarde 15 minutos.")
     lock_mutations(db)
-    if data.reset_token is not None:
-        token = db.get(PasswordReset, _token_digest(data.reset_token))
-        now = datetime.utcnow()
-        if token is None or token.used_at is not None or token.expires_at <= now:
-            raise HTTPException(400, "Código inválido, expirado ou já utilizado.")
-        user = db.get(User, token.user_id)
-        if user is None:
-            raise HTTPException(400, "Código inválido, expirado ou já utilizado.")
-        user.password_hash = hash_password(data.new_password)
-        db.query(PasswordReset).filter(
-            PasswordReset.user_id == user.id,
-            PasswordReset.used_at.is_(None),
-        ).update({"used_at": now})
-        db.commit()
-        return {"message": "Senha redefinida. Entre novamente com a nova senha."}
-
     reset = db.query(PasswordResetToken).join(User).filter(
         User.email == data.email,
         PasswordResetToken.token_hash == _token_digest(data.reset_code),

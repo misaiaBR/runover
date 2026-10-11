@@ -3,6 +3,7 @@ import 'dart:ui' show PointMode;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../format.dart';
 import '../services/daily_challenges.dart';
 import '../services/run_store.dart';
 import '../state/app_state.dart';
@@ -673,13 +674,12 @@ class _ChallengeCard extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '${_formatValue(progress.value)} / '
-                    '${_formatValue(challenge.target)} ${challenge.unit}',
-                    style: muted,
-                  ),
+children: [
+                    Expanded(
+                      child: Text(
+                        '${fmtNum(progress.value)} / ${fmtNum(challenge.target)} ${challenge.unit}',
+                        style: muted,
+                      ),
                 ),
                 if (progress.done) ...[
                   Icon(
@@ -703,13 +703,6 @@ class _ChallengeCard extends StatelessWidget {
       ),
     );
   }
-}
-
-String _formatValue(num value) {
-  final whole = value == value.roundToDouble();
-  return whole
-      ? value.round().toString()
-      : value.toStringAsFixed(1).replaceAll('.', ',');
 }
 
 class _Medal extends StatelessWidget {

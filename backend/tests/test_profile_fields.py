@@ -1,6 +1,6 @@
 """Campos do perfil sobrevivem ao roundtrip PATCH -> GET.
 
-Regressão: o router passava pronouns/share_activities/coin_balance/
+Regressão: o router passava pronouns/share_activities/
 equipped_cosmetics ao UserProfile, mas o schema não os declarava e o
 Pydantic os descartava em silêncio — parecia "não salvo".
 """
@@ -39,7 +39,6 @@ def test_profile_response_carries_all_private_fields(client, registered_user):
     for key in (
         "pronouns",
         "share_activities",
-        "coin_balance",
         "equipped_cosmetics",
         "coins_balance",
     ):

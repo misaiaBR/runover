@@ -1,9 +1,9 @@
 """Insígnias: o catálogo completo com o estado e a data de cada regra."""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db
+from app.core.database import get_db, lock_mutations
 from app.core.security import get_current_user
 from app.models import User
 from app.schemas import Badge
@@ -13,8 +13,13 @@ router = APIRouter(prefix="/badges", tags=["insígnias"])
 
 
 @router.get("", response_model=list[Badge])
-def badges(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def badges(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    utc_offset_minutes: int = Query(0, ge=-720, le=840),
+):
     """Consultar concede o que a regra já alcançou — não há botão de resgate."""
-    entries = list_badges(db, current_user)
+    lock_mutations(db)
+    entries = list_badges(db, current_user, utc_offset_minutes)
     db.commit()
     return entries

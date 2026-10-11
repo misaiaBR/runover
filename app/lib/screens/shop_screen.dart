@@ -121,7 +121,9 @@ class _ShopScreenState extends State<ShopScreen> {
 
   Future<_ShopData> _load(ApiClient api) async {
     final results = await Future.wait([
-      api.getShopCatalog(),
+      // Só itens do usuário: equipe e passe têm vitrines próprias e a
+      // compra aqui recusaria com 400.
+      api.getShopCatalog(scope: 'user'),
       api.getInventory(),
       api.getWallet(),
     ]);

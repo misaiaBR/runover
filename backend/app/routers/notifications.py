@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db
+from app.core.database import get_db, lock_mutations
 from app.core.security import get_current_user
 from app.models import Notification, User
 from app.schemas import NotificationEntry
@@ -33,5 +33,6 @@ def mark_as_read(
     if not n or n.user_id != current_user.id:
         raise HTTPException(404, "Notificação não encontrada.")
     n.is_read = True  # UC "Marca notificação como lida"
+    lock_mutations(db)
     db.commit()
     return NotificationEntry(id=n.id, message=n.message, type=n.type, is_read=n.is_read, created_at=n.created_at)

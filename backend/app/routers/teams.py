@@ -255,6 +255,7 @@ def list_teams(db: Session = Depends(get_db), current_user: User = Depends(get_c
             created_at=t.created_at,
             equipped_avatar=t.equipped_avatar,
             equipped_frame=t.equipped_frame,
+            equipped_effect=t.equipped_effect,
             equipped_banner=t.equipped_banner,
             equipped_name_style=t.equipped_name_style,
         )

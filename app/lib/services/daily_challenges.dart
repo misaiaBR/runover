@@ -172,6 +172,8 @@ List<DailyChallenge> drawDailyChallenges({
   required num longestKm,
   int count = 3,
 }) {
+  // O personalizado ocupa a última vaga: sem vagas, não há sorteio.
+  if (count <= 0) return const [];
   final seed = _seedFrom('${username.trim().toLowerCase()}|${dayKey(date)}');
   final picked = _shuffled(_pool, seed).take(count - 1).toList();
   picked.add(_personalized(weeklyKm: weeklyKm, longestKm: longestKm));
@@ -198,7 +200,9 @@ RunDaySummary summarizeDay(List<Map<String, dynamic>> runs, DateTime date) {
     distanceM += distance;
     seconds += duration;
     startHours.add(local.hour);
-    if (distance >= 10 && duration > 0) {
+    // Ritmo só vale em trecho com tamanho de volta (400 m): 10 m de ruído
+    // de GPS dariam um "pace épico" sem correr de verdade.
+    if (distance >= 400 && duration > 0) {
       final pace = duration / 60 / (distance / 1000);
       if (fastestPace == null || pace < fastestPace) fastestPace = pace;
     }

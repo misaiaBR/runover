@@ -587,6 +587,7 @@ class ApiTests(unittest.TestCase):
         initialize_database()
         with SessionLocal() as db:
             version = db.execute(text("SELECT version_num FROM alembic_version")).scalar()
+>>>>
         self.assertEqual(version, "0018_team_lightning")
 
     def test_wild_endpoint_is_deterministic_and_shared(self):

@@ -62,12 +62,11 @@ class ForgotPasswordRequest(BaseModel):
 class ResetPasswordRequest(BaseModel):
     email: EmailStr | None = None
     reset_code: str | None = Field(default=None, min_length=6, max_length=128)
-    reset_token: str | None = Field(default=None, min_length=20, max_length=128)
     new_password: str
 
     @model_validator(mode="after")
     def validate_reset_credential(self):
-        if self.reset_token is None and (self.email is None or self.reset_code is None):
+        if self.email is None or self.reset_code is None:
             raise ValueError("Informe o e-mail e o código de recuperação.")
         return self
 
@@ -127,7 +126,7 @@ class ProfileUpdateRequest(BaseModel):
     pronouns: str | None = Field(default=None, max_length=80)
     # Preferências de treino
     distance_units: Literal["km", "mi"] | None = None
-    weekly_frequency: int | None = Field(default=None, ge=0, le=7)
+    weekly_frequency: int | None = Field(default=None, ge=1, le=7)
     training_days: list[Literal["seg", "ter", "qua", "qui", "sex", "sab", "dom"]] | None = None
     activity_level: Literal["iniciante", "baixo_impacto", "moderado", "cardio"] | None = None
     mural_widgets: list[str] | None = None
@@ -203,7 +202,6 @@ class UserProfile(UserPublic):
     # Ponto verde do avatar: sinal vivo (batimento do app ou GPS) dentro da
     # janela, e falso para quem está "invisivel".
     online: bool = False
-    coin_balance: int = 0
     equipped_cosmetics: list[str] = []
     play_seconds: int  # RF19 — tempo de jogo
     coins_balance: int = 0
@@ -313,6 +311,7 @@ class TeamSummary(BaseModel):
     # Cosméticos da loja visíveis na lista e no ranking.
     equipped_avatar: str | None = None
     equipped_frame: str | None = None
+    equipped_effect: str | None = None
     equipped_banner: str | None = None
     equipped_name_style: str | None = None
 

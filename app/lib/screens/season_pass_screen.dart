@@ -146,6 +146,17 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
       // oferecer o resgate de novo (o servidor responderia 409).
       if (claimCommitted) _reload();
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      // Falha fora do protocolo da API (ex.: resposta malformada): também
+      // desfaz o otimismo e recarrega o que persistiu, sem vazar exceção.
+      if (!mounted) return;
+      setState(() => _pending.remove(key));
+      if (claimCommitted) _reload();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Não foi possível concluir. Tente de novo.'),
+        ),
+      );
     } finally {
       if (mounted) {
         setState(() => _busy = false);
@@ -218,6 +229,14 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      if (!mounted) return;
+      if (premiumCommitted) _reload();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Não foi possível concluir. Tente de novo.'),
+        ),
+      );
     } finally {
       if (mounted) {
         setState(() => _busy = false);
@@ -269,16 +288,8 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
     );
   }
 
-  String _remaining(DateTime endsAt) {
-    final left = endsAt.difference(DateTime.now());
-    if (left.isNegative) return 'Temporada encerrada';
-    final days = left.inDays;
-    final hours = left.inHours % 24;
-    if (days > 0) return 'Termina em $days d $hours h';
-    final minutes = left.inMinutes % 60;
-    if (hours > 0) return 'Termina em $hours h $minutes min';
-    return 'Termina em $minutes min';
-  }
+  String _remaining(DateTime endsAt) =>
+      formatCountdown(endsAt.difference(DateTime.now()));
 
   Widget _layout(BuildContext context, Season season, Set<String> claimed) {
     return LayoutBuilder(
@@ -356,6 +367,9 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
             priceCoins: season.premiumPriceCoins,
             onTap: () => _unlockPremium(season.premiumPriceCoins),
           );
+    // Com passe ativo não há banner: no estreito o progresso ocupa a linha
+    // toda em vez de espremer-se em metade dela vazia.
+    if (banner == null && !withHeader) return progress;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

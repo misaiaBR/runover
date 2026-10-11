@@ -270,10 +270,15 @@ class ApiClient {
 
   /// Insígnias: catálogo completo com estado, progresso e data de ganho.
   /// Consultar já concede o que a regra alcançou (não há resgate).
-  Future<List<Insignia>> getBadges() async =>
-      ((await _request('GET', '/badges')) as List)
-          .map((e) => Insignia.fromJson(Map<String, dynamic>.from(e)))
-          .toList();
+  Future<List<Insignia>> getBadges() async {
+    // Fuso do aparelho: a meta semanal (Pit stop) usa a mesma semana local
+    // do progresso (`GET /runs/progress`).
+    final offsetMinutes = DateTime.now().timeZoneOffset.inMinutes;
+    return ((await _request('GET', '/badges?utc_offset_minutes=$offsetMinutes'))
+            as List)
+        .map((e) => Insignia.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+  }
 
   /// Ligas: escada da temporada + posição atual do jogador (RR).
   Future<LeaguesResponse> getLeagues() async => LeaguesResponse.fromJson(
