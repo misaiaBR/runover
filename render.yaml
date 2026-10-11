@@ -12,7 +12,7 @@ services:
         sync: false
       - key: SECRET_KEY
         generateValue: true
-      - key: RESEND_API_KEY
+      - key: BREVO_API_KEY
         sync: false
       - key: MAIL_FROM_EMAIL
         sync: false

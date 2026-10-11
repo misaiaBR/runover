@@ -22,12 +22,12 @@ from app.routers import (
 
 initialize_database()
 
-if not (settings.resend_api_key and settings.mail_from_email):
+if not (settings.brevo_api_key and settings.mail_from_email):
     # Diagnóstico de "não recebi o código": sem essas variáveis o
     # forgot-password gera o código mas nenhum e-mail sai.
     logging.getLogger(__name__).warning(
         "Password reset email is not configured "
-        "(RESEND_API_KEY/MAIL_FROM_EMAIL); reset codes will be "
+        "(BREVO_API_KEY/MAIL_FROM_EMAIL); reset codes will be "
         "generated but never delivered."
     )
 

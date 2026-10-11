@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     gmail_client_id: str = ""
     gmail_client_secret: str = ""
     gmail_refresh_token: str = ""
-    resend_api_key: str = ""
+    brevo_api_key: str = ""
     mail_from_email: str = ""
     mail_from_name: str = "RUNOVER!"
     password_reset_expire_minutes: int = 30
