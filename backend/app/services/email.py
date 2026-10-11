@@ -8,21 +8,40 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+_LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
+
 
 class EmailDeliveryError(RuntimeError):
     pass
 
 
+def _is_local_host(host: str) -> bool:
+    return host.strip().lower() in _LOCAL_HOSTS
+
+
+def email_configured() -> bool:
+    """Há remetente suficiente para tentar o envio (usado no aviso de boot)."""
+    host = (settings.smtp_host or "").strip()
+    if not host or not settings.mail_from_email:
+        return False
+    if _is_local_host(host):
+        return True
+    return bool(settings.smtp_username and settings.smtp_password)
+
+
 def send_password_reset_email(email: str, username: str, code: str) -> None:
-    """Send a reset code over SMTP (Gmail, Mailpit local ou Mailtrap).
+    """Send a reset code over SMTP (Gmail, Mailtrap ou Mailpit local).
 
     Porta 465 usa SSL direto; qualquer outra, STARTTLS quando
-    `SMTP_STARTTLS` estiver ligado. Sem host, usuário ou remetente
-    configurados, recusa de cara em vez de fingir que enviou.
+    `SMTP_STARTTLS` estiver ligado. Autenticação só acontece em conexão
+    criptografada — sem TLS, recusa em vez de vazar a credencial — exceto
+    para destino local confiável (Mailpit), que dispensa login. Sem
+    configuração suficiente, recusa de cara em vez de fingir que enviou.
     """
     host = (settings.smtp_host or "").strip()
-    if not host or not settings.smtp_username or not settings.mail_from_email:
+    if not email_configured():
         raise EmailDeliveryError("Email delivery is not configured.")
+    local = _is_local_host(host)
 
     escaped_name = escape(username)
     escaped_code = escape(code)
@@ -58,9 +77,15 @@ def send_password_reset_email(email: str, username: str, code: str) -> None:
             with smtplib.SMTP(
                 host, settings.smtp_port, timeout=settings.api_timeout_seconds
             ) as smtp:
-                if settings.smtp_starttls:
+                encrypted = False
+                if settings.smtp_starttls and not local:
                     smtp.starttls(context=ssl.create_default_context())
-                if settings.smtp_username:
+                    encrypted = True
+                if not encrypted and not local:
+                    raise EmailDeliveryError(
+                        "SMTP exige TLS para autenticar."
+                    )
+                if not local:
                     smtp.login(settings.smtp_username, settings.smtp_password)
                 smtp.send_message(message)
     except (smtplib.SMTPException, OSError, ssl.SSLError) as exc:

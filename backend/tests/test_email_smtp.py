@@ -95,3 +95,35 @@ def test_ssl_error_raises(monkeypatch, configured, tmp_path):
     monkeypatch.setattr(smtplib, "SMTP_SSL", explode)
     with pytest.raises(EmailDeliveryError):
         send_password_reset_email("a@example.com", "ana", "123")
+
+
+def test_missing_password_refuses_before_sending(monkeypatch, configured):
+    monkeypatch.setattr(settings, "smtp_password", "")
+    with pytest.raises(EmailDeliveryError):
+        send_password_reset_email("a@example.com", "ana", "123")
+
+
+def test_local_mailpit_needs_no_login(monkeypatch, configured):
+    monkeypatch.setattr(settings, "smtp_host", "127.0.0.1")
+    monkeypatch.setattr(settings, "smtp_port", 1025)
+    monkeypatch.setattr(settings, "smtp_username", "")
+    monkeypatch.setattr(settings, "smtp_password", "")
+    monkeypatch.setattr(smtplib, "SMTP", _FakeSMTP)
+    send_password_reset_email("a@example.com", "ana", "123")
+
+    (server,) = _FakeSMTP.instances
+    assert server.logged_in is None
+    assert server.started_tls is False
+    assert len(server.sent) == 1
+
+
+def test_no_tls_remote_refuses_to_authenticate(monkeypatch, configured):
+    monkeypatch.setattr(settings, "smtp_port", 587)
+    monkeypatch.setattr(settings, "smtp_starttls", False)
+    monkeypatch.setattr(smtplib, "SMTP", _FakeSMTP)
+    with pytest.raises(EmailDeliveryError, match="TLS"):
+        send_password_reset_email("a@example.com", "ana", "123")
+
+    (server,) = _FakeSMTP.instances
+    assert server.logged_in is None
+    assert server.sent == []

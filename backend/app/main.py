@@ -15,6 +15,7 @@ from app.geometry import polygon_to_geojson
 from app.legal import privacy_response
 from app.h3cells import cell_for
 from app.models import Territory
+from app.services.email import email_configured
 from app.routers import (
     auth, badges, leagues, location, notifications, presence, ranking, shop, teams,
     territories, users, runs, pass_runover,
@@ -22,12 +23,13 @@ from app.routers import (
 
 initialize_database()
 
-if not (settings.smtp_host and settings.smtp_username and settings.mail_from_email):
+if not email_configured():
     # Diagnóstico de "não recebi o código": sem essas variáveis o
     # forgot-password gera o código mas nenhum e-mail sai.
     logging.getLogger(__name__).warning(
         "Password reset email is not configured "
-        "(SMTP_HOST/SMTP_USERNAME/MAIL_FROM_EMAIL); reset codes will be "
+        "(SMTP_HOST/SMTP_USERNAME/SMTP_PASSWORD/MAIL_FROM_EMAIL; "
+        "local dispensa usuário e senha); reset codes will be "
         "generated but never delivered."
     )
 
