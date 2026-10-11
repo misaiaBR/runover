@@ -12,3 +12,6 @@ const seasonPassGoldBorder = Color(0xFF6B5A1E);
 
 /// Texto legível sobre o dourado (botões e selos preenchidos).
 const seasonPassOnGold = Color(0xFF3A2A00);
+
+/// Texto secundário sobre o fundo dourado do banner (subtítulo discreto).
+const seasonPassOnGoldDim = Color(0xFFD8D2BC);

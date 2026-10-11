@@ -28,11 +28,26 @@ enum RewardState {
 }
 
 /// Recompensa de um nível da temporada (só visual, sem vantagem no jogo).
+///
+/// [title] é o rótulo completo (acessibilidade e o caso em que só há uma
+/// linha). [coins] e [itemName] vêm do servidor separados para o cartão poder
+/// pôr cada parte em sua linha em vez de espremer tudo numa frase só.
 class Reward {
-  const Reward({required this.title, required this.icon});
+  const Reward({
+    required this.title,
+    required this.icon,
+    this.coins = 0,
+    this.itemName,
+  });
 
   final String title;
   final IconData icon;
+
+  /// Dracmas da recompensa (0 = nenhuma).
+  final int coins;
+
+  /// Nome do cosmético, quando o catálogo da loja o conhece.
+  final String? itemName;
 }
 
 /// Um nível da temporada: recompensa grátis (cima) e do passe (baixo).

@@ -86,22 +86,27 @@ Season seasonFromStatus(
   );
 }
 
-/// Rótulo da recompensa, igual ao da trilha antiga: dracmas formatadas em
-/// pt-BR mais o nome do item do catálogo.
+/// Rótulo da recompensa: as dracmas e o nome do item chegam separados do
+/// servidor, então o cartão pode pô-los em linhas próprias. [title] continua
+/// sendo a frase completa, para a acessibilidade e para o catálogo vazio.
 Reward _reward(
   Map? reward, {
   required bool premium,
   required Map<String, String> names,
 }) {
-  final parts = <String>[];
   final coins = (reward?['coins'] as num?)?.toInt() ?? 0;
-  if (coins > 0) parts.add('+${formatPoints(coins)} dracmas');
   final itemId = '${reward?['item_id'] ?? ''}';
-  if (itemId.isNotEmpty) parts.add(names[itemId] ?? 'Exclusivo');
+  final itemName = itemId.isEmpty ? null : (names[itemId] ?? 'Exclusivo');
+  final parts = <String>[
+    if (coins > 0) '+${formatPoints(coins)} dracmas',
+    ?itemName,
+  ];
   return Reward(
     title: parts.isEmpty ? '—' : parts.join(' · '),
     icon: itemId.isEmpty
         ? Icons.monetization_on_outlined
         : (premium ? Icons.workspace_premium_outlined : Icons.redeem),
+    coins: coins,
+    itemName: itemName,
   );
 }
