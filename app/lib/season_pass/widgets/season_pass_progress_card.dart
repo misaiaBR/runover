@@ -23,18 +23,33 @@ class SeasonPassProgressCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'Nível ${season.currentLevel}',
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
+                // Os dois números dividem a linha com o banner do passe no
+                // layout estreito: cada um encolhe a fonte em vez de
+                // transbordar o cartão.
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Nível ${season.currentLevel}',
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                 ),
-                Text(
-                  '${season.points} / ${season.pointsForNext} pts',
-                  style: TextStyle(color: scheme.onSurfaceVariant),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      '${season.points} / ${season.pointsForNext} pts',
+                      style: TextStyle(color: scheme.onSurfaceVariant),
+                    ),
+                  ),
                 ),
               ],
             ),

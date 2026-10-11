@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:runover_app/screens/season_pass_screen.dart';
 import 'package:runover_app/season_pass/models.dart';
+import 'package:runover_app/season_pass/widgets/season_pass_banner.dart';
+import 'package:runover_app/season_pass/widgets/season_pass_progress_card.dart';
 import 'package:runover_app/theme.dart';
 
 import 'season_pass_fixture.dart';
@@ -112,13 +114,81 @@ void main() {
 
   testWidgets('em 360 px abre sem overflow', (tester) async {
     await openSeason(tester, size: const Size(360, 740));
-    // A página (vertical) é a primeira lista; a segunda é a trilha horizontal.
-    await tester.scrollUntilVisible(
-      find.text('Ver passe'),
-      300,
-      scrollable: find.byType(Scrollable).first,
+    // O banner divide a linha com o progresso, acima da trilha: já aparece na
+    // primeira tela, sem rolar a página inteira.
+    expect(find.text('Desbloquear passe'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('progresso e banner ficam lado a lado, com a trilha abaixo', (
+    tester,
+  ) async {
+    await openSeason(tester, size: const Size(451, 900));
+    final progress = tester.getRect(find.byType(SeasonPassProgressCard));
+    final banner = tester.getRect(find.byType(SeasonPassBanner));
+    // Um ao lado do outro: o banner começa depois do fim do progresso e na
+    // mesma linha dele.
+    expect(banner.left, greaterThanOrEqualTo(progress.right));
+    expect((banner.top - progress.top).abs(), lessThan(8));
+    // E a trilha vem abaixo dos dois.
+    expect(
+      tester.getTopLeft(find.text('Grátis')).dy,
+      greaterThan(progress.bottom),
     );
-    expect(find.text('Ver passe'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a trilha abre no nível atual, não no nível 1', (tester) async {
+    await openSeason(tester, season: longSeason(), size: const Size(900, 700));
+    expect(find.text('L12 grátis'), findsOneWidget);
+    // Os níveis anteriores ao atual ficam atrás, no arrasto — não na cara de
+    // quem acabou de abrir a tela.
+    expect(find.text('L1 grátis'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('o fim da trilha aparece depois do último nível', (
+    tester,
+  ) async {
+    await openSeason(
+      tester,
+      season: longSeason(levels: 30, currentLevel: 1),
+      size: const Size(900, 700),
+    );
+    expect(find.text('Fim da trilha'), findsNothing);
+    await tester.dragUntilVisible(
+      find.text('Fim da trilha'),
+      find.byType(Scrollable).last,
+      const Offset(-400, 0),
+    );
+    expect(find.text('Fim da trilha'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('"Requer passe" abre a confirmação do passe', (tester) async {
+    var opened = 0;
+    await openSeason(tester, onOpenPass: () => opened++);
+    // Cartão tocável: o nível já foi alcançado, falta só o passe.
+    await tester.tap(find.text('Requer passe').first);
+    await tester.pumpAndSettle();
+    expect(opened, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('nível bloqueado não se passa por disponível', (tester) async {
+    var claimed = 0;
+    var opened = 0;
+    await openSeason(
+      tester,
+      onClaim: (level, lane) async => claimed++,
+      onOpenPass: () => opened++,
+    );
+    // O cartão de um nível ainda não alcançado não abre nada: nem resgate,
+    // nem venda.
+    await tester.tap(find.text('Nível 6').first);
+    await tester.pumpAndSettle();
+    expect(claimed, 0);
+    expect(opened, 0);
     expect(tester.takeException(), isNull);
   });
 }

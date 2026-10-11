@@ -213,18 +213,40 @@ void main() {
 
   testWidgets('premium desbloqueia com confirmação', (tester) async {
     final pass = await openPass(tester);
-    expect(find.text('Ver passe'), findsOneWidget);
+    expect(find.text('Desbloquear passe'), findsOneWidget);
 
-    await tester.tap(find.text('Ver passe'));
+    await tester.tap(find.text('Desbloquear passe'));
     await tester.pumpAndSettle();
     expect(find.text('Trilha premium?'), findsOneWidget);
-    expect(find.textContaining('1.000 dracmas'), findsOneWidget);
+    // "por 1.000 dracmas" é a frase da confirmação; o banner também mostra o
+    // preço, mas solto.
+    expect(find.textContaining('por 1.000 dracmas'), findsOneWidget);
     await tester.tap(find.text('Desbloquear'));
     await tester.pumpAndSettle();
     expect(pass.calls, [('premium',)]);
     expect(find.text('Trilha premium desbloqueada!'), findsOneWidget);
     // Com o passe, o banner some: a faixa premium vira resgatável.
-    expect(find.text('Ver passe'), findsNothing);
+    expect(find.text('Desbloquear passe'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('o cartão "Requer passe" abre a mesma confirmação', (
+    tester,
+  ) async {
+    final pass = await openPass(tester);
+    // O nível 1 já foi alcançado: o cartão do passe é um caminho de verdade,
+    // não um aviso mudo. A trilha pode estar abaixo da dobra na janela do
+    // teste — primeiro vem à vista.
+    await tester.ensureVisible(find.text('Requer passe'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Requer passe'));
+    await tester.pumpAndSettle();
+    expect(find.text('Trilha premium?'), findsOneWidget);
+    await tester.tap(find.text('Agora não'));
+    await tester.pumpAndSettle();
+    // Recusar não compra: nenhuma escrita saiu e o banner continua lá.
+    expect(pass.calls, isEmpty);
+    expect(find.text('Desbloquear passe'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -232,7 +254,7 @@ void main() {
     tester,
   ) async {
     final pass = await openPass(tester);
-    expect(find.text('Ver passe'), findsOneWidget);
+    expect(find.text('Desbloquear passe'), findsOneWidget);
     final fetches = pass.passFetches;
 
     // A loja liberou o premium; o painel não viu a compra acontecer.
@@ -241,7 +263,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(pass.passFetches, fetches + 1);
-    expect(find.text('Ver passe'), findsNothing);
+    expect(find.text('Desbloquear passe'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -266,7 +288,7 @@ void main() {
 
     // O resgate falhou, então a recarga é o flush do fim da operação.
     expect(pass.passFetches, fetches + 1);
-    expect(find.text('Ver passe'), findsNothing);
+    expect(find.text('Desbloquear passe'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -294,7 +316,7 @@ void main() {
     final pass = await openPass(tester, profileFails: true);
     final fetches = pass.passFetches;
 
-    await tester.tap(find.text('Ver passe'));
+    await tester.tap(find.text('Desbloquear passe'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Desbloquear'));
     await tester.pumpAndSettle();
@@ -303,7 +325,7 @@ void main() {
     // oferecendo o desbloqueio de novo.
     expect(pass.calls, [('premium',)]);
     expect(find.text('Perfil indisponível.'), findsOneWidget);
-    expect(find.text('Ver passe'), findsNothing);
+    expect(find.text('Desbloquear passe'), findsNothing);
     expect(pass.passFetches, fetches + 1);
     expect(tester.takeException(), isNull);
   });

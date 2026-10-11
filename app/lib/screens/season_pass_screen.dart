@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../format.dart';
 import '../season_pass/backend.dart';
 import '../season_pass/models.dart';
+import '../season_pass/trail_metrics.dart';
 import '../season_pass/widgets/season_pass_banner.dart';
 import '../season_pass/widgets/season_pass_hex_node.dart';
 import '../season_pass/widgets/season_pass_lane_labels.dart';
@@ -31,12 +32,14 @@ import 'pass_screen.dart';
 /// no ranking.
 ///
 /// Layout responsivo, sem "caixa" estreita na web:
-/// - Estreito (< 760 px, celular): coluna única com uma só rolagem vertical.
-/// - Largo (web): cabeçalho, progresso e banner numa coluna lateral de 340 px
-///   e a trilha ocupando todo o restante da largura — a página só mostra
-///   barra de rolagem se o conteúdo exceder a altura.
+/// - Estreito (< 760 px, celular): cabeçalho em cima, card de progresso e
+///   banner do passe lado a lado, e a trilha logo abaixo.
+/// - Largo (web): cabeçalho, progresso e banner formam uma linha no topo e a
+///   trilha ocupa toda a altura que sobra — os cartões crescem com a janela
+///   em vez de deixar um vazio embaixo.
 /// A trilha é sempre a única rolagem horizontal (arrastável com o mouse na
-/// web) e a coluna "Grátis / Passe" fica fixa à esquerda dela.
+/// web) e a coluna "Grátis / Passe" fica fixa à esquerda dela. Ela abre no
+/// nível atual do jogador e termina num nó de bandeira.
 class SeasonPassScreen extends StatefulWidget {
   const SeasonPassScreen({super.key, this.season, this.onClaim, this.onOpenPass});
 
@@ -63,10 +66,23 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
   late Future<Season> _future = _startLoad();
   bool _busy = false;
 
+  /// Rolagem da trilha horizontal: serve para abrir a tela no nível atual.
+  final ScrollController _trailScroll = ScrollController();
+
+  /// Último nível para o qual a trilha já foi posicionada — uma vez por nível,
+  /// para não brigar com o arrasto de quem já está olhando a trilha.
+  int _centeredLevel = -1;
+
   bool get _controlled => widget.season != null;
 
   @override
   bool get busy => _busy;
+
+  @override
+  void dispose() {
+    _trailScroll.dispose();
+    super.dispose();
+  }
 
   @override
   void didChangeDependencies() {
@@ -273,46 +289,89 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
             children: [
               _header(context, season),
               const SizedBox(height: 12),
-              SeasonPassProgressCard(season: season),
+              _cardsRow(context, season, withHeader: false),
               const SizedBox(height: 16),
-              _trail(context, season, claimed),
-              const SizedBox(height: 12),
-              if (!season.hasPass)
-                SeasonPassBanner(
-                  name: season.name,
-                  onTap: () => _unlockPremium(season.premiumPriceCoins),
-                ),
+              _trail(context, season, claimed, TrailMetrics.base),
             ],
           );
         }
-        return SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(
-                width: 340,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
+        // Cabeçalho, progresso e banner formam uma linha só a partir de
+        // 1.100 px; abaixo disso o cabeçalho sobe numa linha própria para os
+        // dois cartões não ficarem espremidos.
+        final withHeader = constraints.maxWidth >= 1100;
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(32, 24, 32, 16),
+              child: Column(
+                children: [
+                  if (!withHeader) ...[
                     _header(context, season),
                     const SizedBox(height: 12),
-                    SeasonPassProgressCard(season: season),
-                    const SizedBox(height: 12),
-                    if (!season.hasPass)
-                      SeasonPassBanner(
-                        name: season.name,
-                        onTap: () => _unlockPremium(season.premiumPriceCoins),
-                      ),
                   ],
+                  _cardsRow(context, season, withHeader: withHeader),
+                ],
+              ),
+            ),
+            // A trilha come a altura que sobra na janela: os cartões crescem
+            // até [TrailMetrics.maxScale] em vez de deixar o vazio embaixo.
+            // Em janela muito baixa, ela própria rola.
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(32, 0, 32, 24),
+                child: LayoutBuilder(
+                  builder: (context, box) {
+                    final metrics = TrailMetrics.fitting(box.maxHeight);
+                    final trail = _trail(
+                      context,
+                      season,
+                      claimed,
+                      metrics,
+                    );
+                    return metrics.trailHeight < box.maxHeight
+                        ? Center(child: trail)
+                        : SingleChildScrollView(child: trail);
+                  },
                 ),
               ),
-              const SizedBox(width: 32),
-              Expanded(child: _trail(context, season, claimed)),
-            ],
-          ),
+            ),
+          ],
         );
       },
+    );
+  }
+
+  /// Linha do topo: progresso e banner lado a lado — e o cabeçalho junto,
+  /// quando há largura para os três ([withHeader]).
+  Widget _cardsRow(
+    BuildContext context,
+    Season season, {
+    required bool withHeader,
+  }) {
+    final progress = SeasonPassProgressCard(season: season);
+    final banner = season.hasPass
+        ? null
+        : SeasonPassBanner(
+            name: season.name,
+            priceCoins: season.premiumPriceCoins,
+            onTap: () => _unlockPremium(season.premiumPriceCoins),
+          );
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (withHeader) ...[
+          SizedBox(width: 300, child: _header(context, season)),
+          const SizedBox(width: 20),
+        ],
+        Expanded(flex: withHeader ? 5 : 1, child: progress),
+        const SizedBox(width: 20),
+        // Sem o banner o espaço continua reservado: o card de progresso não
+        // se espicha meia tela de web sozinho.
+        Expanded(
+          flex: withHeader ? 6 : 1,
+          child: banner ?? const SizedBox.shrink(),
+        ),
+      ],
     );
   }
 
@@ -350,28 +409,34 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
   }
 
   /// A trilha: rótulos fixos à esquerda + níveis em rolagem horizontal.
-  Widget _trail(BuildContext context, Season season, Set<String> claimed) {
+  Widget _trail(
+    BuildContext context,
+    Season season,
+    Set<String> claimed,
+    TrailMetrics metrics,
+  ) {
     final dragBoth = ScrollConfiguration.of(context).copyWith(
       // Permite arrastar a trilha com o mouse na versão web.
       dragDevices: {PointerDeviceKind.touch, PointerDeviceKind.mouse},
     );
+    _centerOnCurrentLevel(season, metrics);
     return SizedBox(
-      height:
-          SeasonPassLevelColumn.cardSlotHeight * 2 +
-          SeasonPassLevelColumn.railHeight,
+      height: metrics.trailHeight,
       child: Row(
         children: [
-          const SeasonPassLaneLabels(),
+          SeasonPassLaneLabels(metrics: metrics),
           Expanded(
             child: ScrollConfiguration(
               behavior: dragBoth,
               child: ListView(
+                controller: _trailScroll,
                 scrollDirection: Axis.horizontal,
                 children: [
                   for (final level in season.levels)
                     SeasonPassLevelColumn(
                       level: level.level,
                       currentLevel: season.currentLevel,
+                      metrics: metrics,
                       freeCard: SeasonPassRewardCard(
                         reward: level.free,
                         state: rewardStateOf(
@@ -382,6 +447,7 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
                         ),
                         level: level.level,
                         premium: false,
+                        metrics: metrics,
                         onClaim: () => _claim(level.level, RewardLane.free),
                       ),
                       passCard: SeasonPassRewardCard(
@@ -394,9 +460,15 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
                         ),
                         level: level.level,
                         premium: true,
+                        metrics: metrics,
                         onClaim: () => _claim(level.level, RewardLane.pass),
+                        // "Requer passe" é um caminho de verdade: abre a
+                        // mesma confirmação do banner em vez de só avisar.
+                        onNeedsPass: () =>
+                            _unlockPremium(season.premiumPriceCoins),
                       ),
                     ),
+                  _trailEnd(context, metrics),
                 ],
               ),
             ),
@@ -404,5 +476,80 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
         ],
       ),
     );
+  }
+
+  /// Nó de bandeira depois do último nível: diz que a trilha acabou, sem
+  /// precisar rolar às cegas até o fim dela.
+  ///
+  /// O nó fica exatamente sobre a linha da trilha (por isso o [Stack] em vez
+  /// de uma coluna centralizada: o rótulo embaixo empurraria o nó para cima)
+  /// e um pedaço de trilho liga ele ao último nível.
+  Widget _trailEnd(BuildContext context, TrailMetrics metrics) {
+    final scheme = Theme.of(context).colorScheme;
+    final nodeSize = 34 * metrics.scale;
+    return SizedBox(
+      width: metrics.cardWidth * 1.4,
+      height: metrics.trailHeight,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: SizedBox(
+              width: metrics.cardWidth * 0.55,
+              child: Container(
+                height: 4,
+                color: scheme.surfaceContainerHighest,
+              ),
+            ),
+          ),
+          SeasonPassHexNode(
+            label: Icon(
+              Icons.flag_outlined,
+              size: 17 * metrics.scale,
+              color: scheme.onPrimary,
+            ),
+            color: scheme.secondary,
+            size: nodeSize,
+          ),
+          Positioned(
+            top: metrics.trailHeight / 2 + nodeSize / 2 + 6 * metrics.scale,
+            left: 0,
+            right: 0,
+            child: Text(
+              'Fim da trilha',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 11 * metrics.scale,
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Abre a trilha no nível atual do jogador — com 30 níveis, começar no 1 é
+  /// chegar numa tela de cartões lacrados e ter que procurar a si mesmo.
+  void _centerOnCurrentLevel(Season season, TrailMetrics metrics) {
+    if (_centeredLevel == season.currentLevel) return;
+    _centeredLevel = season.currentLevel;
+    final index = season.levels.indexWhere(
+      (level) => level.level == season.currentLevel,
+    );
+    // Nível 1 (ou temporada zerada) já é o começo da trilha.
+    if (index <= 0) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_trailScroll.hasClients) return;
+      final position = _trailScroll.position;
+      // O nível atual no meio da janela, com a trilha dos dois lados — é ele
+      // que o jogador veio olhar.
+      final target =
+          index * metrics.cardWidth -
+          position.viewportDimension / 2 +
+          metrics.cardWidth / 2;
+      position.jumpTo(target.clamp(0.0, position.maxScrollExtent).toDouble());
+    });
   }
 }
