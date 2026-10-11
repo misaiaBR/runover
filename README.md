@@ -105,7 +105,7 @@ A branch de produção é `main`. O Blueprint em `render.yaml` descreve um servi
 
 A recuperação de senha por código usa a API Brevo (HTTPS — SMTP direto nas portas 25/465/587 é bloqueado no plano gratuito do Render). Configure `BREVO_API_KEY` e `MAIL_FROM_EMAIL` no Render; `MAIL_FROM_NAME` pode permanecer como `RUNOVER!`. Nunca coloque credenciais neste arquivo ou no Git. Sem essas duas variáveis, o endpoint responde como se tivesse enviado, mas nenhum e-mail sai — esse é o sintoma de "não recebi o código". A inicialização registra um aviso no log quando o envio está desconfigurado.
 
-O remetente precisa estar verificado na Brevo (`Senders & IP`) — vale endereço individual, sem domínio próprio.
+O remetente precisa estar verificado na Brevo (`Senders & IP`) — vale endereço individual, sem domínio próprio. Com remetente freemail (ex.: Gmail), a Brevo reescreve o `From` para um subdomínio `brevosend.com` dela e o e-mail tem mais chance de ir ao spam — o código chega, mas com esse endereço. Para exibir `contato@seudominio` com DKIM alinhado, verifique um domínio próprio em `Domains`.
 
 Após um deploy saudável, `https://runover.onrender.com/` abre o app e `https://runover.onrender.com/health` retorna o status da API. Todo PR compila o Dockerfile no job `docker` para não descobrir quebra só no deploy; na `main`, o job ainda dispara o Deploy Hook do Render se o segredo `RENDER_DEPLOY_HOOK` existir (senão, vale o auto-deploy do Blueprint).
 
