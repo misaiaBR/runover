@@ -1,13 +1,10 @@
 """Ranking reflete os cosméticos da loja (foto, nome e cards)."""
+from auth_helpers import auth_headers
 
 
 def _register(client, username, email):
-    response = client.post("/auth/register", json={
-        "full_name": f"{username} Name", "username": username, "email": email,
-        "password": "secret123", "accept_terms": True,
-    })
-    assert response.status_code == 201, response.text
-    return {"Authorization": f"Bearer {response.json()['access_token']}"}
+    return auth_headers(client, username=username, email=email,
+                        full_name=f"{username} Name", password="secret123")
 
 
 def test_ranking_carries_shop_cosmetics(client, db_session):

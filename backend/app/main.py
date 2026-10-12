@@ -24,12 +24,13 @@ from app.routers import (
 initialize_database()
 
 if not (settings.brevo_api_key and settings.mail_from_email):
-    # Diagnóstico de "não recebi o código": sem essas variáveis o
-    # forgot-password gera o código mas nenhum e-mail sai.
+    # Diagnóstico de "não recebi o código": sem essas variáveis nenhum e-mail
+    # sai — nem o do cadastro, que hoje segura a entrada no aplicativo, nem o
+    # de recuperação.
     logging.getLogger(__name__).warning(
-        "Password reset email is not configured "
-        "(BREVO_API_KEY/MAIL_FROM_EMAIL); reset codes will be "
-        "generated but never delivered."
+        "Email delivery is not configured (BREVO_API_KEY/MAIL_FROM_EMAIL). "
+        "Codes are generated but never delivered; with "
+        "MAIL_CONSOLE_FALLBACK off, sign-up fails with 503."
     )
 
 

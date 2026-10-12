@@ -10,6 +10,7 @@ import '../services/api_client.dart';
 import '../services/social_auth.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
+import 'email_confirmation_screen.dart';
 import 'forgot_password_screen.dart';
 import 'register_screen.dart';
 import 'terms_screen.dart';
@@ -77,7 +78,12 @@ class _LoginScreenState extends State<LoginScreen> {
       await context.read<AppState>().loginWithOAuth(provider, token);
     } on ApiException catch (error) {
       if (!mounted) return;
-      if (error.statusCode == 403 && await _confirmReactivate()) {
+      // Uma conta social nasce confirmada (o provedor já respondeu pelo
+      // e-mail), mas se o servidor algum dia devolver o portão aqui, offerecer
+      // "reativar" seria um beco sem saída: o que falta é o código.
+      if (error.statusCode == 403 &&
+          !error.requiresEmailVerification &&
+          await _confirmReactivate()) {
         if (!mounted) return;
         await _reactivateWithOAuth(provider, token);
         return;
@@ -163,6 +169,10 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     } on ApiException catch (e) {
       if (!mounted) return;
+      if (e.requiresEmailVerification) {
+        _openEmailConfirmation();
+        return;
+      }
       final deactivated = e.statusCode == 403;
       setState(() {
         _error = e.message;
@@ -179,6 +189,23 @@ class _LoginScreenState extends State<LoginScreen> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  /// Abre a tela do código para o e-mail que está no formulário.
+  ///
+  /// Os dois 403 de entrada têm saídas opostas — reativar com a senha x digitar
+  /// o código do e-mail — e o servidor distingue um do outro pelo `code` do
+  /// erro, então nada aqui depende de ler a frase.
+  void _openEmailConfirmation() {
+    setState(() {
+      _error = null;
+      _deactivated = false;
+    });
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => EmailConfirmationScreen(email: _emailCtrl.text.trim()),
+      ),
+    );
   }
 
   /// Pergunta se deseja reativar a conta desativada.
@@ -222,12 +249,15 @@ class _LoginScreenState extends State<LoginScreen> {
         _passwordCtrl.text,
       );
     } on ApiException catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = e.message;
-          _deactivated = e.statusCode == 403;
-        });
+      if (!mounted) return;
+      if (e.requiresEmailVerification) {
+        _openEmailConfirmation();
+        return;
       }
+      setState(() {
+        _error = e.message;
+        _deactivated = e.statusCode == 403;
+      });
     } catch (_) {
       if (mounted) {
         setState(() => _error = 'Não foi possível conectar ao servidor.');

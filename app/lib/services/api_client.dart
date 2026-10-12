@@ -7,11 +7,25 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models.dart';
 import 'session_store.dart';
 
+/// Seletor que o servidor manda junto do 403 quando a conta existe e a senha
+/// está certa, mas o e-mail ainda não foi confirmado. Os dois 403 de entrada
+/// (desativada x sem confirmar) têm saídas opostas, então o aplicativo escolhe
+/// o caminho por este código, nunca pela frase.
+const String emailVerificationRequiredCode = 'email_verification_required';
+
 class ApiException implements Exception {
   final String message;
   final int? statusCode;
   final bool retryable;
-  ApiException(this.message, {this.statusCode, this.retryable = false});
+
+  /// Campos `code` do erro estruturado do servidor; nulo na resposta comum.
+  final String? code;
+  ApiException(
+    this.message, {
+    this.statusCode,
+    this.retryable = false,
+    this.code,
+  });
   @override
   String toString() => message;
 
@@ -20,6 +34,9 @@ class ApiException implements Exception {
       statusCode == 408 ||
       statusCode == 429 ||
       statusCode! >= 500;
+
+  bool get requiresEmailVerification =>
+      code == emailVerificationRequiredCode;
 }
 
 class NetworkUnavailableException extends ApiException {
@@ -29,6 +46,41 @@ class NetworkUnavailableException extends ApiException {
         retryable: true,
       );
 }
+
+/// O que o cadastro devolve: a conta passou a existir, mas entrar depende de
+/// o servidor já ter liberado a porta pelo e-mail.
+class RegistrationResult {
+  const RegistrationResult({
+    required this.email,
+    required this.requiresVerification,
+    this.expiresInMinutes,
+    this.resendAfterSeconds,
+  });
+
+  final String email;
+  final bool requiresVerification;
+
+  /// Tempos do servidor. Nulos quando a resposta não traz o campo, caso em que
+  /// a tela simplesmente não mostra a contagem — chutar 30/60 aqui divergiria
+  /// do portão real.
+  final int? expiresInMinutes;
+  final int? resendAfterSeconds;
+}
+
+/// Resposta do pedido de novo código: sempre a mesma frase, seja qual for o
+/// endereço, mais a espera que o servidor aplica.
+class VerificationResend {
+  const VerificationResend({required this.message, this.resendAfterSeconds});
+
+  final String message;
+  final int? resendAfterSeconds;
+}
+
+int? _optionalInt(dynamic value) => value is int ? value : null;
+
+/// Corpo de objeto de uma resposta; sem corpo (ou com outro tipo), vazio.
+Map<String, dynamic> _objectBody(dynamic data) =>
+    data is Map<String, dynamic> ? data : const <String, dynamic>{};
 
 class ApiClient {
   ApiClient({
@@ -101,9 +153,18 @@ class ApiClient {
       var message = response.statusCode == 401
           ? 'Sua sessão expirou. Entre novamente.'
           : 'Não foi possível concluir (${response.statusCode}).';
+      String? code;
       if (data is Map) {
         final detail = data['detail'];
         if (detail is String) message = detail;
+        // Erro estruturado: o servidor manda a frase em `message` e, quando há
+        // mais de uma saída possível, um `code` para o app escolher o caminho.
+        if (detail is Map) {
+          final text = detail['message'];
+          if (text is String) message = text;
+          final selector = detail['code'];
+          if (selector is String) code = selector;
+        }
         if (detail is List) {
           message = detail.map((e) => e is Map ? e['msg'] : e).join('\n');
         }
@@ -112,6 +173,7 @@ class ApiClient {
         message,
         statusCode: response.statusCode,
         retryable: response.statusCode >= 500 || response.statusCode == 429,
+        code: code,
       );
     } on TimeoutException {
       throw NetworkUnavailableException();
@@ -120,7 +182,7 @@ class ApiClient {
     }
   }
 
-  Future<void> register({
+  Future<RegistrationResult> register({
     required String fullName,
     required String username,
     required String email,
@@ -135,7 +197,50 @@ class ApiClient {
       'photo_url': photoUrl,
       'accept_terms': true,
     });
+    final body = _objectBody(data);
+    // Compatibilidade de implantação: o aplicativo pode chegar antes do backend
+    // do portão. Enquanto o servidor antigo devolve `access_token`, o cadastro
+    // entra direto; quando o portão subir, o campo some e o código do e-mail
+    // passa a ser o único caminho para dentro.
+    final token = body['access_token'];
+    if (token is String && token.isNotEmpty) {
+      await _saveToken(token);
+      return RegistrationResult(email: email, requiresVerification: false);
+    }
+    return RegistrationResult(
+      email: body['email'] is String ? body['email'] as String : email,
+      requiresVerification: true,
+      expiresInMinutes: _optionalInt(body['expires_in_minutes']),
+      resendAfterSeconds: _optionalInt(body['resend_after_seconds']),
+    );
+  }
+
+  /// Troca o código recebido por e-mail pela primeira sessão da conta.
+  Future<void> verifyEmail({
+    required String email,
+    required String code,
+  }) async {
+    final data = await _request('POST', '/auth/verify-email', {
+      'email': email,
+      'code': code,
+    });
     await _saveToken(data['access_token']);
+  }
+
+  /// Pedido de novo código. A resposta é sempre a mesma, e é ela que diz quanto
+  /// esperar antes de perguntar de novo.
+  Future<VerificationResend> resendVerification(String email) async {
+    final data = await _request('POST', '/auth/resend-verification', {
+      'email': email,
+    });
+    final body = _objectBody(data);
+    final message = body['message'];
+    return VerificationResend(
+      message: message is String
+          ? message
+          : 'Se o e-mail estiver cadastrado e precisar confirmar, enviaremos um novo código.',
+      resendAfterSeconds: _optionalInt(body['resend_after_seconds']),
+    );
   }
 
   Future<void> login({required String email, required String password}) async {

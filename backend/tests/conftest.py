@@ -2,6 +2,12 @@ import os
 
 os.environ.setdefault("DATABASE_URL", "sqlite://")
 os.environ.setdefault("SECRET_KEY", "test-only-secret-key-that-is-long-enough")
+# Nenhum teste depende de caixa de correio: o código de confirmação vai para a
+# resposta do cadastro (auth_helpers), como no desenvolvimento local.
+os.environ.setdefault("MAIL_CONSOLE_FALLBACK", "true")
+# Mesmo com uma chave real no ambiente de quem roda os testes, nada sai para a
+# internet: a entrega é sempre simulada (test_email_brevo) ou vai para o log.
+os.environ.setdefault("BREVO_API_KEY", "")
 
 import pytest
 from fastapi.testclient import TestClient
@@ -64,4 +70,12 @@ def registered_user(client):
         "accept_terms": True,
     })
     assert response.status_code == 201
-    return {"token": response.json()["access_token"], "email": "runner@example.com"}
+    body = response.json()
+    # A conta existe, mas não entra: o token só sai depois do código.
+    assert "access_token" not in body
+    confirmed = client.post("/auth/verify-email", json={
+        "email": "runner@example.com",
+        "code": body["debug_code"],
+    })
+    assert confirmed.status_code == 200, confirmed.text
+    return {"token": confirmed.json()["access_token"], "email": "runner@example.com"}

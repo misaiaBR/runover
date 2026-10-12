@@ -7,6 +7,7 @@ idempotente e paga metade dos pontos da janela ao cofre.
 from datetime import datetime, timedelta, timezone
 
 from app.models import ScoreEvent, Territory, TerritoryOwnership, User
+from auth_helpers import create_verified_user
 
 
 def _auth(registered_user):
@@ -14,15 +15,15 @@ def _auth(registered_user):
 
 
 def _register(client, username, email):
-    response = client.post("/auth/register", json={
-        "full_name": username,
-        "username": username,
-        "email": email,
-        "password": "original123",
-        "accept_terms": True,
-    })
-    assert response.status_code == 201, response.text
-    return {"Authorization": f"Bearer {response.json()['access_token']}"}
+    """Conta nova com a caixa de correio confirmada.
+
+    Desde o portão, `POST /auth/register` devolve a conta sem sessão: o token só
+    sai depois do código. `create_verified_user` faz os dois passos e é o mesmo
+    caminho que todo teste de autenticação daqui percorre.
+    """
+    token = create_verified_user(client, username=username, email=email,
+                                 password="original123")
+    return {"Authorization": f"Bearer {token}"}
 
 
 def _team(client, headers, name="Trovão"):

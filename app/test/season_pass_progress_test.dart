@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:runover_app/season_pass/backend.dart';
-import 'package:runover_app/season_pass/widgets/season_pass_progress_card.dart';
+import 'package:runover_app/season_pass/widgets/season_pass_progress_bar.dart';
 import 'package:runover_app/theme.dart';
 
 /// Mapa do `GET /pass` com tiers de 200 em 200 pontos.
@@ -68,7 +68,7 @@ void main() {
         theme: buildRunoverTheme(),
         home: Scaffold(
           body: SingleChildScrollView(
-            child: SeasonPassProgressCard(season: season),
+            child: SeasonPassProgressBar(season: season),
           ),
         ),
       ),
@@ -81,7 +81,7 @@ void main() {
     // A barra está no meio do caminho, não em 80% (320/400).
     final bar = tester.widget<LinearProgressIndicator>(
       find.descendant(
-        of: find.byType(SeasonPassProgressCard),
+        of: find.byType(SeasonPassProgressBar),
         matching: find.byType(LinearProgressIndicator),
       ),
     );
@@ -100,7 +100,7 @@ void main() {
         theme: buildRunoverTheme(),
         home: Scaffold(
           body: SingleChildScrollView(
-            child: SeasonPassProgressCard(season: season),
+            child: SeasonPassProgressBar(season: season),
           ),
         ),
       ),

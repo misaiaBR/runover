@@ -12,9 +12,9 @@ class TrailMetrics {
 
   /// Tamanho base — celular e janelas baixas.
   static const base = TrailMetrics(
-    cardWidth: 96,
-    cardSlotHeight: 120,
-    railHeight: 48,
+    cardWidth: 104,
+    cardSlotHeight: 150,
+    railHeight: 46,
   );
 
   /// Passar disso vira mancha de cartões enormes na web.

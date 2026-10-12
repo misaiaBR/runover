@@ -1,29 +1,28 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
-import '../../format.dart';
-import '../gold.dart';
+import '../../widgets/offer_row.dart';
 import '../models.dart';
+import '../palette.dart';
 import '../trail_metrics.dart';
-import 'season_pass_hex_node.dart';
+import 'season_pass_coin_stack.dart';
 
-/// Cartão de uma recompensa da trilha (faixa grátis em cima, passe embaixo).
+/// Cartão de uma recompensa da trilha: faixa grátis (laranja, em cima) e faixa
+/// do passe (violeta, embaixo).
 ///
-/// A linguagem visual diz o estado sem depender de um cadeado gigante em cada
-/// nível — com 30 níveis, uma fileira de cadeados vira ruído:
-/// - **bloqueado**: o próprio ícone da recompensa aparece esmaecido (dá para
-///   ver o que vem por aí) atrás de um selo hexagonal, com borda tracejada;
-/// - **requer passe**: o ícone vem em dourado esmaecido, selo dourado e borda
-///   sólida — o cartão é tocável e abre a confirmação do passe;
-/// - **resgatável**: borda e selo cheios, botão "Resgatar" preenchido;
-/// - **resgatado**: tudo em cor secundária, com o selo de visto.
+/// A linguagem visual diz o estado sem cadeado gigante — com 30 níveis, uma
+/// fileira de cadeados vira ruído:
+/// - **bloqueado**: véu escuro sobre a faixa, arte esmaecida e selo de lacre;
+/// - **requer passe**: faixa violeta com contorno dourado e selo do passe;
+/// - **resgatável**: borda acesa, brilho esverdeado e etiqueta "Resgatar";
+/// - **resgatado**: faixa mais escura, selo de visto e "Resgatado".
 ///
-/// O dourado só aparece no que o jogador já alcançou: a faixa do passe
-/// bloqueada não pode parecer disponível.
+/// Tocar o cartão **seleciona** a recompensa: quem resgata é o botão do painel
+/// de destaque, que mostra a prévia grande do item. O cartão não faz as duas
+/// coisas ao mesmo tempo — um toque que escolhesse e gastasse pontos ao mesmo
+/// tempo não daria para desfazer.
 ///
 /// O cartão inteiro é a área de toque e o nome do item nunca é cortado com
-/// reticências — quando falta espaço, o bloco de texto encolhe junto.
+/// reticências: quando falta espaço, o bloco de texto encolhe junto.
 class SeasonPassRewardCard extends StatelessWidget {
   const SeasonPassRewardCard({
     super.key,
@@ -32,8 +31,8 @@ class SeasonPassRewardCard extends StatelessWidget {
     required this.level,
     required this.premium,
     required this.metrics,
-    required this.onClaim,
-    this.onNeedsPass,
+    required this.selected,
+    required this.onSelect,
   });
 
   final Reward reward;
@@ -44,112 +43,102 @@ class SeasonPassRewardCard extends StatelessWidget {
   /// Medidas da trilha (tamanho do cartão e escala da tipografia).
   final TrailMetrics metrics;
 
-  final VoidCallback onClaim;
+  /// O cartão da recompensa aberta no painel de destaque.
+  final bool selected;
 
-  /// Chamado quando o cartão pede o passe. Sem ele, o cartão fica inerte.
-  final VoidCallback? onNeedsPass;
+  final VoidCallback onSelect;
 
-  static const double _radius = 14;
+  static const double _radius = 12;
 
   bool get _sealed => state == RewardState.locked;
 
-  /// Dourado é recompensa de quem já chegou ali — nunca um nível bloqueado.
-  bool get _gold => premium && !_sealed;
+  bool get _claimable => state == RewardState.claimable;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final active =
-        state == RewardState.claimable || state == RewardState.needsPass;
-    final onTap = state == RewardState.claimable
-        ? onClaim
-        : (state == RewardState.needsPass ? onNeedsPass : null);
     final status = switch (state) {
       RewardState.claimed => 'Resgatado',
       RewardState.claimable => 'Resgatar',
-      RewardState.locked => 'Nível $level',
+      // O cartão bloqueado já diz o nível no topo e o nó da trilha diz os
+      // pontos que abrem aquele nível: uma terceira etiqueta só repetiria.
+      RewardState.locked => '',
       RewardState.needsPass => 'Requer passe',
     };
-    final borderColor = switch (state) {
-      RewardState.claimable => scheme.primary,
-      RewardState.needsPass => seasonPassGoldBorder,
-      // Resgatado guarda a cor da faixa: o dourado de um item do passe não
-      // fica bem com o verde do resgate.
-      RewardState.claimed => _gold
-        ? seasonPassGoldBorder.withValues(alpha: 0.7)
-        : scheme.secondary.withValues(alpha: 0.5),
-      RewardState.locked => scheme.outlineVariant.withValues(alpha: 0.55),
-    };
-
     return Semantics(
-      button: active,
-      label: '${reward.title}, $status',
+      button: true,
+      label:
+          '${reward.title}, '
+          '${state == RewardState.locked ? 'bloqueada' : status}, '
+          '${selected ? 'selecionada' : 'tocar para ver a recompensa'}',
       excludeSemantics: true,
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(_radius),
-          onTap: onTap,
+          onTap: onSelect,
           child: Container(
             width: metrics.cardInnerWidth,
             height: metrics.cardHeight,
             decoration: BoxDecoration(
-              color: _gold ? seasonPassGoldBg : scheme.surface,
+              gradient: trailGradient(premium: premium),
               borderRadius: BorderRadius.circular(_radius),
-              // A borda tracejada é o "lacre": desenhada por fora do
-              // `Border.all`, que só sabe fazer linha contínua.
-              border: _sealed
-                  ? null
-                  : Border.all(color: borderColor, width: active ? 1.5 : 1),
+              border: Border.all(
+                color: selected
+                    ? Colors.white
+                    : (_claimable ? trailReached : Colors.white.withValues(alpha: .22)),
+                width: selected ? 3 : 1,
+              ),
+              boxShadow: _claimable
+                  ? [
+                      BoxShadow(
+                        color: trailReached.withValues(alpha: 0.55),
+                        blurRadius: 12,
+                        spreadRadius: 1,
+                      ),
+                    ]
+                  : null,
             ),
-            child: _sealed
-                ? CustomPaint(
-                    painter: _DashedRRectPainter(
-                      color: borderColor,
-                      radius: _radius,
+            child: Stack(
+              children: [
+                Positioned.fill(child: _content(context, status)),
+                if (_sealed)
+                  // O véu é o "lacre": a faixa continua colorida por baixo,
+                  // então dá para ver o que vem — só não está liberado.
+                  Positioned.fill(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.46),
+                        borderRadius: BorderRadius.circular(_radius),
+                      ),
                     ),
-                    child: _content(context, scheme, status),
-                  )
-                : _content(context, scheme, status),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _content(BuildContext context, ColorScheme scheme, String status) {
+  Widget _content(BuildContext context, String status) {
     final s = metrics.scale;
-    final tint = _gold ? seasonPassGold : scheme.primary;
     return Padding(
-      padding: EdgeInsets.fromLTRB(4, 6 * s, 4, 6 * s),
+      padding: EdgeInsets.fromLTRB(4, 6 * s, 4, 5 * s),
       child: Column(
         children: [
-          SizedBox(
-            height: 30 * s,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Icon(
-                  reward.icon,
-                  size: 26 * s,
-                  // Esmaecido em vez de escondido atrás de um cadeado: o
-                  // jogador vê o que o nível entrega. Resgatado também perde
-                  // força — já foi seu.
-                  color: _sealed
-                      ? scheme.onSurfaceVariant.withValues(alpha: 0.45)
-                      : (state == RewardState.claimed
-                            ? tint.withValues(alpha: 0.6)
-                            : tint),
-                ),
-                Positioned(
-                  right: 1,
-                  bottom: 0,
-                  child: _Seal(state: state, gold: _gold, size: 17 * s),
-                ),
-              ],
+          Text(
+            'NÍVEL $level',
+            maxLines: 1,
+            style: TextStyle(
+              fontSize: 9.5 * s,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.6 * s,
+              height: 1.1,
+              color: Colors.white.withValues(alpha: 0.92),
+              shadows: const [Shadow(color: Colors.black26, offset: Offset(0, 1))],
             ),
           ),
-          SizedBox(height: 3 * s),
+          SizedBox(height: 2 * s),
           // Ocupa a sobra e encolhe o texto quando não cabe: o nome do item
           // nunca termina em "…".
           Expanded(
@@ -162,90 +151,64 @@ class SeasonPassRewardCard extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (reward.itemName != null && reward.coins > 0)
-                      Text(
-                        '+${formatPoints(reward.coins)} dracmas',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 11 * s,
-                          fontWeight: FontWeight.w600,
-                          height: 1.15,
-                          color: _sealed
-                              ? scheme.onSurfaceVariant
-                              : (_gold ? seasonPassOnGoldDim : tint),
-                        ),
-                      ),
                     Text(
-                      reward.itemName ?? reward.title,
+                      reward.label,
                       textAlign: TextAlign.center,
-                      maxLines: 3,
+                      maxLines: 2,
                       style: TextStyle(
-                        fontSize: 12 * s,
+                        fontSize: 11.5 * s,
+                        fontWeight: FontWeight.w700,
                         height: 1.15,
-                        color: _sealed
-                            ? scheme.onSurfaceVariant
-                            : scheme.onSurface,
+                        color: Colors.white,
+                        shadows: const [
+                          Shadow(color: Colors.black38, offset: Offset(0, 1)),
+                        ],
                       ),
                     ),
+                    if (reward.subLabel != null)
+                      Text(
+                        reward.subLabel!,
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        style: TextStyle(
+                          fontSize: 10 * s,
+                          fontWeight: FontWeight.w700,
+                          height: 1.2,
+                          color: trailAccent,
+                        ),
+                      ),
+                    SizedBox(height: 2 * s),
+                    _art(metrics),
                   ],
                 ),
               ),
             ),
           ),
-          SizedBox(height: 3 * s),
-          _StatusPill(
+          _StatusTag(
             text: status,
             state: state,
-            gold: _gold,
-            fontSize: 11 * s,
+            fontSize: 10 * s,
             maxWidth: metrics.cardInnerWidth - 6,
           ),
         ],
       ),
     );
   }
-}
 
-/// Selo do canto do cartão: o lacre hexagonal da trilha.
-///
-/// Mostra o estado com um glifo de 10 px em vez de tomar o cartão inteiro.
-class _Seal extends StatelessWidget {
-  const _Seal({required this.state, required this.gold, required this.size});
-
-  final RewardState state;
-  final bool gold;
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final (icon, color, ink) = switch (state) {
-      RewardState.locked => (
-        Icons.lock_outline,
-        scheme.surfaceContainerHighest,
-        scheme.onSurfaceVariant,
+  /// Arte da recompensa: dracmas em pilha, cosmético na escala pequena do
+  /// cartão, e o ícone do servidor quando o catálogo não conhece o item.
+  Widget _art(TrailMetrics metrics) {
+    final s = metrics.scale;
+    final opacity = _sealed || state == RewardState.claimed ? 0.72 : 1.0;
+    final child = switch (reward.item) {
+      final item when item != null => ShopPreview(item: item, scale: 0.52 * s),
+      _ when reward.coins > 0 => SeasonPassCoinStack(
+        coins: reward.coins,
+        size: 58 * s,
       ),
-      RewardState.needsPass => (
-        Icons.workspace_premium_outlined,
-        seasonPassGoldBorder,
-        seasonPassGold,
-      ),
-      RewardState.claimed => (
-        Icons.check_rounded,
-        scheme.secondaryContainer,
-        scheme.onSecondaryContainer,
-      ),
-      RewardState.claimable => (
-        Icons.emoji_events_outlined,
-        scheme.primary,
-        scheme.onPrimary,
-      ),
+      _ => Icon(reward.icon, size: 34 * s, color: Colors.white),
     };
-    return SeasonPassHexNode(
-      label: Icon(icon, size: size * .62, color: ink),
-      color: gold && state == RewardState.claimable ? seasonPassGold : color,
-      size: size,
-    );
+    return Opacity(opacity: opacity, child: child);
   }
 }
 
@@ -253,93 +216,60 @@ class _Seal extends StatelessWidget {
 ///
 /// Uma linha só, com o texto reduzido quando não cabe: "Requer passe" é o
 /// rótulo de um botão, e cortado ele deixa de ser uma instrução.
-class _StatusPill extends StatelessWidget {
-  const _StatusPill({
+class _StatusTag extends StatelessWidget {
+  const _StatusTag({
     required this.text,
     required this.state,
-    required this.gold,
     required this.fontSize,
     required this.maxWidth,
   });
 
   final String text;
   final RewardState state;
-  final bool gold;
   final double fontSize;
   final double maxWidth;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final filled = state == RewardState.claimable;
-    final outlined = state == RewardState.needsPass;
+    if (text.isEmpty) {
+      // Reserva a mesma altura das outras etiquetas: as faixas alinham nó por
+      // nó, cartão por cartão.
+      return SizedBox(height: fontSize * 1.5);
+    }
     final style = TextStyle(
       fontSize: fontSize,
-      fontWeight: FontWeight.w600,
+      fontWeight: FontWeight.w800,
       height: 1.15,
+      letterSpacing: 0.4,
       color: switch (state) {
-        RewardState.claimable => gold ? seasonPassOnGold : scheme.onPrimary,
-        RewardState.needsPass => seasonPassGold,
-        RewardState.claimed => scheme.secondary,
-        RewardState.locked => scheme.onSurfaceVariant,
+        RewardState.claimable => trailReachedInk,
+        RewardState.needsPass => trailAccent,
+        RewardState.claimed => Colors.white,
+        RewardState.locked => Colors.white.withValues(alpha: 0.7),
       },
     );
     final label = FittedBox(
       fit: BoxFit.scaleDown,
-      child: Text(text, maxLines: 1, style: style),
+      child: Text(
+        state == RewardState.claimed ? '✓ $text' : text,
+        maxLines: 1,
+        style: style,
+      ),
     );
-    if (!filled && !outlined) return SizedBox(height: fontSize * 1.4, child: label);
-    // Contorno dourado no "Requer passe": é um convite ao toque, não um
-    // botão já pago.
+    final filled = state == RewardState.claimable;
+    final outlined = state == RewardState.needsPass;
+    if (!filled && !outlined) {
+      return SizedBox(height: fontSize * 1.5, child: Center(child: label));
+    }
     return Container(
       constraints: BoxConstraints(maxWidth: maxWidth),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2 * (fontSize / 10)),
       decoration: BoxDecoration(
-        color: filled ? (gold ? seasonPassGold : scheme.primary) : null,
-        border: outlined ? Border.all(color: seasonPassGoldBorder) : null,
-        borderRadius: BorderRadius.circular(10),
+        color: filled ? trailReached : null,
+        border: outlined ? Border.all(color: trailAccent, width: 1.2) : null,
+        borderRadius: BorderRadius.circular(9),
       ),
       child: label,
     );
   }
-}
-
-/// Borda tracejada do cartão lacrado: linha contínua pareceria com o resto, e
-/// o tracejado é o que faz o nível bloqueado parecer "ainda fechado".
-class _DashedRRectPainter extends CustomPainter {
-  const _DashedRRectPainter({required this.color, required this.radius});
-
-  final Color color;
-  final double radius;
-
-  static const double _dash = 5;
-  static const double _gap = 4;
-  static const double _stroke = 1.3;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final inset = _stroke / 2;
-    final rect = Offset(inset, inset) &
-        Size(size.width - _stroke, size.height - _stroke);
-    final path = Path()
-      ..addRRect(
-        RRect.fromRectAndRadius(rect, Radius.circular(radius)),
-      );
-    final paint = Paint()
-      ..color = color
-      ..strokeWidth = _stroke
-      ..style = PaintingStyle.stroke;
-    for (final metric in path.computeMetrics()) {
-      var distance = 0.0;
-      while (distance < metric.length) {
-        final next = math.min(distance + _dash, metric.length);
-        canvas.drawPath(metric.extractPath(distance, next), paint);
-        distance = next + _gap;
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(_DashedRRectPainter oldDelegate) =>
-      oldDelegate.color != color || oldDelegate.radius != radius;
 }

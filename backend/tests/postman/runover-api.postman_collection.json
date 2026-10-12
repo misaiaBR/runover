@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "RUNOVER! API",
-    "description": "Collection executável da API RUNOVER! — espelha a collection de referência e roda no Newman (CI e local). Fluxo: Health → Register → Login (salva token) → leituras autenticadas → equipe → territórios → corrida → ranking/notificações → encerramento (DELETE + sessão morta). Requer banco limpo a cada execução.",
+    "description": "Collection executável da API RUNOVER! — espelha a collection de referência e roda no Newman (CI e local). Fluxo: Health → Register → Verify E-mail (salva token) → Login → leituras autenticadas → equipe → territórios → corrida → ranking/notificações → encerramento (DELETE + sessão morta). Requer banco limpo a cada execução e API com MAIL_CONSOLE_FALLBACK=true, porque o cadastro entrega o código de confirmação pela resposta nesse modo.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -12,6 +12,7 @@
     { "key": "base_url", "value": "http://127.0.0.1:8000" },
     { "key": "email", "value": "" },
     { "key": "username", "value": "" },
+    { "key": "verification_code", "value": "" },
     { "key": "team_id", "value": "" },
     { "key": "run_id", "value": "" },
     { "key": "token", "value": "" }
@@ -52,7 +53,7 @@
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": "{{base_url}}/auth/register",
-            "description": "Cadastro (201). Gera email/username únicos por execução para permitir reruns.",
+            "description": "Cadastro (201). Gera email/username únicos por execução para permitir reruns. Não devolve token: a conta espera o código.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"full_name\": \"Corredor Newman\",\n  \"username\": \"{{username}}\",\n  \"email\": \"{{email}}\",\n  \"password\": \"Corridas123\",\n  \"photo_url\": null,\n  \"accept_terms\": true\n}",
@@ -75,9 +76,40 @@
               "script": {
                 "exec": [
                   "pm.test('status 201', () => pm.response.to.have.status(201));",
-                  "pm.test('tem access_token', () => {",
-                  "  pm.expect(pm.response.json().access_token).to.be.a('string');",
-                  "});"
+                  "const body = pm.response.json();",
+                  "pm.test('sem sessao antes do codigo', () => {",
+                  "  pm.expect(body.access_token).to.eql(undefined);",
+                  "  pm.expect(body.requires_verification).to.be.true;",
+                  "});",
+                  "// MAIL_CONSOLE_FALLBACK=true: o codigo vem na resposta.",
+                  "pm.collectionVariables.set('verification_code', body.debug_code);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify Email",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/auth/verify-email",
+            "description": "Troca o código do e-mail pela primeira sessão (200). É o único caminho para dentro de uma conta recém-criada.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"code\": \"{{verification_code}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const token = pm.response.json().access_token;",
+                  "pm.test('token salvo', () => pm.expect(token).to.be.a('string'));",
+                  "pm.environment.set('token', token);"
                 ]
               }
             }
@@ -105,6 +137,36 @@
                   "const token = pm.response.json().access_token;",
                   "pm.test('token salvo', () => pm.expect(token).to.be.a('string'));",
                   "pm.environment.set('token', token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Resend Verification",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/auth/resend-verification",
+            "description": "Reenvio do código de cadastro. Depois do Verify Email a conta já está confirmada, então a resposta é a mesma genérica de sempre e nenhum e-mail novo sai. Rodar antes da confirmação exigiria esperar a janela de reenvio (resend_after_seconds).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('resposta generic com a espera real', () => {",
+                  "  pm.expect(body.message).to.be.a('string');",
+                  "  pm.expect(body.resend_after_seconds).to.be.a('number');",
+                  "  pm.expect(body.access_token).to.eql(undefined);",
+                  "});"
                 ]
               }
             }

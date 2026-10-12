@@ -18,6 +18,7 @@ from app.services.badges import CATALOG
 from app.services.pass_runover import current_season
 from app.services.scoring import TEAM_WEEK_GOAL_KM
 from app.services.shop import CATALOG as SHOP_CATALOG
+from auth_helpers import auth_headers
 
 
 def _auth(registered_user):
@@ -129,18 +130,14 @@ def test_conquest_and_team_rules(client, registered_user, db_session):
 
 def test_level_badges_are_not_shop_or_pass_items(client):
     """As insígnias não são cópias do que a loja ou o passe entregam."""
-    headers = client.post(
-        "/auth/register",
-        json={
-            "full_name": "Ana Teste", "username": "anabadge",
-            "email": "ana@example.com", "password": "original123",
-            "accept_terms": True,
-        },
-    ).json()["access_token"]
+    headers = auth_headers(
+        client, username="anabadge", email="ana@example.com",
+        full_name="Ana Teste", password="original123",
+    )
     owned = {item["id"] for item in SHOP_CATALOG}
     badge_ids = {badge["id"] for badge in CATALOG}
     assert owned.isdisjoint(badge_ids)
-    assert client.get("/badges", headers={"Authorization": f"Bearer {headers}"}).status_code == 200
+    assert client.get("/badges", headers=headers).status_code == 200
 
 
 def test_badges_are_removed_with_the_account(client, registered_user, db_session):
@@ -172,12 +169,8 @@ def test_every_badge_is_grouped_in_a_category(client, registered_user):
 
 
 def _register(client, username, email):
-    body = {
-        "full_name": f"Conta {username}", "username": username, "email": email,
-        "password": "original123", "accept_terms": True,
-    }
-    token = client.post("/auth/register", json=body).json()["access_token"]
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = auth_headers(client, username=username, email=email,
+                           full_name=f"Conta {username}", password="original123")
     return headers, client.get("/users/me", headers=headers).json()["id"]
 
 

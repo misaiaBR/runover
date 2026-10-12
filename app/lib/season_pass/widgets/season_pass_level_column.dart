@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
+import '../../format.dart';
+import '../palette.dart';
 import '../trail_metrics.dart';
 import 'season_pass_hex_node.dart';
 
-/// Coluna de um nível da trilha: cartão grátis, conector com o nó hexagonal
-/// numerado e cartão do passe.
+/// Coluna de um nível da trilha: cartão grátis, nó hexagonal com os pontos que
+/// abrem o nível e cartão do passe.
 ///
 /// As medidas vêm de [TrailMetrics] — a coluna de rótulos e a tela usam as
 /// mesmas para alinhar as faixas em qualquer densidade de tela.
@@ -12,6 +14,7 @@ class SeasonPassLevelColumn extends StatelessWidget {
   const SeasonPassLevelColumn({
     super.key,
     required this.level,
+    required this.threshold,
     required this.currentLevel,
     required this.metrics,
     required this.freeCard,
@@ -19,6 +22,9 @@ class SeasonPassLevelColumn extends StatelessWidget {
   });
 
   final int level;
+
+  /// Pontos acumulados que abrem este nível — o número do nó.
+  final int threshold;
   final int currentLevel;
   final TrailMetrics metrics;
   final Widget freeCard;
@@ -26,12 +32,11 @@ class SeasonPassLevelColumn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final reached = level <= currentLevel;
     final done = level < currentLevel;
     final current = level == currentLevel;
-    final track = scheme.surfaceContainerHighest;
-    final nodeSize = 32 * metrics.scale;
+    final nodeWidth = 54 * metrics.scale;
+    final nodeHeight = 32 * metrics.scale;
     return SizedBox(
       width: metrics.cardWidth,
       child: Column(
@@ -51,20 +56,20 @@ class SeasonPassLevelColumn extends StatelessWidget {
             child: Stack(
               alignment: Alignment.center,
               children: [
-                // Linha da trilha: cor secundária até o nível atual, trilho
+                // Linha da trilha: verde-água até o nível atual, trilho
                 // apagado depois.
                 Row(
                   children: [
                     Expanded(
                       child: Container(
                         height: 4,
-                        color: reached ? scheme.secondary : track,
+                        color: reached ? trailReached : trailNodeIdle,
                       ),
                     ),
                     Expanded(
                       child: Container(
                         height: 4,
-                        color: done ? scheme.secondary : track,
+                        color: done ? trailReached : trailNodeIdle,
                       ),
                     ),
                   ],
@@ -72,26 +77,31 @@ class SeasonPassLevelColumn extends StatelessWidget {
                 if (current)
                   // Halo no formato do próprio nó: marca onde o jogador está
                   // sem precisar de texto nem de animação.
-                  SeasonPassHexNode(
-                    label: const SizedBox.shrink(),
-                    color: scheme.primary.withValues(alpha: 0.3),
-                    size: nodeSize + 10 * metrics.scale,
+                  _Hexagon(
+                    color: trailAccent.withValues(alpha: 0.35),
+                    width: nodeWidth + 12 * metrics.scale,
+                    height: nodeHeight + 10 * metrics.scale,
+                    child: const SizedBox.shrink(),
                   ),
-                SeasonPassHexNode(
-                  label: Text(
-                    '$level',
+                _Hexagon(
+                  color: current
+                      ? trailAccent
+                      : (reached ? trailReached : trailNodeIdle),
+                  width: nodeWidth,
+                  height: nodeHeight,
+                  child: Text(
+                    formatPoints(threshold),
+                    maxLines: 1,
                     style: TextStyle(
-                      fontSize: 13 * metrics.scale,
-                      fontWeight: FontWeight.w600,
-                      color: reached
-                          ? scheme.onPrimary
-                          : scheme.onSurfaceVariant,
+                      fontSize: 10.5 * metrics.scale,
+                      fontWeight: FontWeight.w800,
+                      color: current
+                          ? trailAccentInk
+                          : (reached
+                                ? trailReachedInk
+                                : trailNodeInk),
                     ),
                   ),
-                  color: done
-                      ? scheme.secondary
-                      : (reached ? scheme.primary : track),
-                  size: nodeSize,
                 ),
               ],
             ),
@@ -107,6 +117,36 @@ class SeasonPassLevelColumn extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Hexágono achatado (mais largo que alto) para o nó da trilha: é a forma do
+/// [SeasonPassHexClipper], com a altura do trilho.
+class _Hexagon extends StatelessWidget {
+  const _Hexagon({
+    required this.color,
+    required this.width,
+    required this.height,
+    required this.child,
+  });
+
+  final Color color;
+  final double width;
+  final double height;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipPath(
+      clipper: const SeasonPassHexClipper(),
+      child: Container(
+        width: width,
+        height: height,
+        color: color,
+        alignment: Alignment.center,
+        child: child,
       ),
     );
   }

@@ -38,6 +38,15 @@ class Settings(BaseSettings):
     mail_from_name: str = "RUNOVER!"
     password_reset_expire_minutes: int = 30
     password_reset_cooldown_seconds: int = 60
+    # Confirmação de e-mail no cadastro: o código vale o mesmo tempo do de
+    # recuperação, e o reenvio obedece ao mesmo cooldown.
+    email_verification_expire_minutes: int = 30
+    email_verification_cooldown_seconds: int = 60
+    # Só para desenvolvimento e teste: sem credencial de envio configurada, o
+    # código vai para o log (e para a resposta do cadastro) em vez de o
+    # cadastro falhar. Em produção fica falso — lá, sem provedor configurado,
+    # criar conta responde erro em vez de gerar conta sem código.
+    mail_console_fallback: bool = False
     public_app_url: str = ""
     api_timeout_seconds: float = 15.0
 

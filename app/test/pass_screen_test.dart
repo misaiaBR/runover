@@ -58,6 +58,7 @@ class _PassFixture {
     this.serverClaimedFree = false,
     this.claimFails = false,
     this.profileFails = false,
+    this.noTiers = false,
   });
 
   final List calls = [];
@@ -69,6 +70,10 @@ class _PassFixture {
   /// O `GET /users/me` que fecha a escrita falha: a gravação já vale no
   /// servidor, então a tela não pode desfazê-la nem mostrar erro.
   bool profileFails;
+
+  /// Resposta do passe sem nenhum tier: payload quebrado, não um estado entre
+  /// temporadas. A tela tem que avisar em vez de montar uma trilha vazia.
+  bool noTiers;
 
   /// Quando definido, o resgate fica pendurado até o teste completar este
   /// future — serve para agir enquanto o painel está ocupado.
@@ -88,27 +93,26 @@ void main() {
     bool claimedFree = false,
     bool claimFails = false,
     bool profileFails = false,
+    bool noTiers = false,
   }) async {
     final fixture = _PassFixture(
       serverPremium: premium,
       serverClaimedFree: claimedFree,
       claimFails: claimFails,
       profileFails: profileFails,
+      noTiers: noTiers,
     );
     final api = ApiClient(
       client: MockClient((request) async {
         final path = request.url.path;
         if (request.method == 'GET' && path == '/pass') {
           fixture.passFetches++;
-          return http.Response(
-            jsonEncode(
-              passStatus(
-                premium: fixture.serverPremium,
-                claimedFree: fixture.serverClaimedFree,
-              ),
-            ),
-            200,
+          final status = passStatus(
+            premium: fixture.serverPremium,
+            claimedFree: fixture.serverClaimedFree,
           );
+          if (fixture.noTiers) status.remove('tiers');
+          return http.Response(jsonEncode(status), 200);
         }
         if (request.method == 'GET' && path == '/shop/catalog') {
           // O handler roda durante o pumpAndSettle da recarga, então a
@@ -177,12 +181,30 @@ void main() {
     return fixture;
   }
 
-  /// A trilha é maior que a janela de teste: sem trazer o cartão para a
-  /// viewport o toque cai no vazio e nada é resgatado.
-  Future<void> claimFreeReward(WidgetTester tester) async {
-    await tester.ensureVisible(find.text('Resgatar'));
+  /// O painel de destaque é quem age: o botão do estado da recompensa aberta.
+  Future<void> tapPanelButton(WidgetTester tester, String label) async {
+    await tester.ensureVisible(find.widgetWithText(FilledButton, label));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Resgatar'));
+    await tester.tap(find.widgetWithText(FilledButton, label));
+    await tester.pumpAndSettle();
+  }
+
+  /// Seleciona a recompensa da faixa do passe no painel.
+  Future<void> selectPassReward(WidgetTester tester) async {
+    await tester.ensureVisible(find.text('Requer passe'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Requer passe'));
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> claimFreeReward(WidgetTester tester) async {
+    await tapPanelButton(tester, 'Resgatar');
+  }
+
+  /// Abre o passe pela faixa violeta e confirma na conversa.
+  Future<void> openPremiumDialog(WidgetTester tester) async {
+    await selectPassReward(tester);
+    await tapPanelButton(tester, 'Ativar passe · 1.000 dracmas');
   }
 
   testWidgets('mostra temporada, níveis e resgata a faixa grátis', (
@@ -190,19 +212,19 @@ void main() {
   ) async {
     final pass = await openPass(tester);
     expect(find.text('Passe de Temporada'), findsOneWidget);
-    expect(find.text('Temporada outubro de 2026'), findsOneWidget);
+    expect(find.text('outubro de 2026'), findsOneWidget);
     expect(find.text('Nível 1'), findsOneWidget);
     expect(find.text('250 / 400 pts'), findsOneWidget);
     // A trilha horizontal: um nó por nível, rótulos fixos à esquerda.
     expect(find.text('Grátis'), findsOneWidget);
     expect(find.text('Passe'), findsOneWidget);
-    expect(find.text('+10 dracmas'), findsOneWidget);
+    expect(find.text('+10'), findsOneWidget);
+    expect(find.text('200'), findsOneWidget);
     expect(find.text('Requer passe'), findsOneWidget);
-    expect(find.text('Nível 2'), findsNWidgets(2));
+    expect(find.text('NÍVEL 2'), findsNWidgets(2));
 
-    await claimFreeReward(tester);
     final fetches = pass.passFetches;
-    await tester.pumpAndSettle();
+    await claimFreeReward(tester);
     expect(pass.calls, [('claim', 1, 'free')]);
     expect(find.text('Recompensa resgatada!'), findsOneWidget);
     // O resgate já recarrega: a revisão que ele mesmo provocou não gera uma
@@ -213,40 +235,50 @@ void main() {
 
   testWidgets('premium desbloqueia com confirmação', (tester) async {
     final pass = await openPass(tester);
-    expect(find.text('Desbloquear passe'), findsOneWidget);
-
-    await tester.tap(find.text('Desbloquear passe'));
+    // O painel abre no resgate pendente; o passe entra em cena pela faixa
+    // violeta, onde o preço é do lado do botão.
+    expect(find.textContaining('Ativar passe'), findsNothing);
+    await selectPassReward(tester);
+    expect(find.textContaining('Só itens visuais'), findsOneWidget);
+    await tester.tap(
+      find.widgetWithText(FilledButton, 'Ativar passe · 1.000 dracmas'),
+    );
     await tester.pumpAndSettle();
     expect(find.text('Trilha premium?'), findsOneWidget);
-    // "por 1.000 dracmas" é a frase da confirmação; o banner também mostra o
+    // "por 1.000 dracmas" é a frase da confirmação; o botão do painel mostra o
     // preço, mas solto.
     expect(find.textContaining('por 1.000 dracmas'), findsOneWidget);
     await tester.tap(find.text('Desbloquear'));
     await tester.pumpAndSettle();
     expect(pass.calls, [('premium',)]);
     expect(find.text('Trilha premium desbloqueada!'), findsOneWidget);
-    // Com o passe, o banner some: a faixa premium vira resgatável.
-    expect(find.text('Desbloquear passe'), findsNothing);
+    // Com o passe, o painel para de oferecê-lo: o selo da barra é o aviso.
+    expect(find.textContaining('Ativar passe'), findsNothing);
+    expect(find.text('Passe ativo'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('o cartão "Requer passe" abre a mesma confirmação', (
+  testWidgets('o cartão "Requer passe" leva ao botão que ativa o passe', (
     tester,
   ) async {
     final pass = await openPass(tester);
     // O nível 1 já foi alcançado: o cartão do passe é um caminho de verdade,
     // não um aviso mudo. A trilha pode estar abaixo da dobra na janela do
     // teste — primeiro vem à vista.
-    await tester.ensureVisible(find.text('Requer passe'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Requer passe'));
+    await selectPassReward(tester);
+    await tester.tap(
+      find.widgetWithText(FilledButton, 'Ativar passe · 1.000 dracmas'),
+    );
     await tester.pumpAndSettle();
     expect(find.text('Trilha premium?'), findsOneWidget);
     await tester.tap(find.text('Agora não'));
     await tester.pumpAndSettle();
-    // Recusar não compra: nenhuma escrita saiu e o banner continua lá.
+    // Recusar não compra: nenhuma escrita saiu e o painel continua oferecendo.
     expect(pass.calls, isEmpty);
-    expect(find.text('Desbloquear passe'), findsOneWidget);
+    expect(
+      find.widgetWithText(FilledButton, 'Ativar passe · 1.000 dracmas'),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
   });
 
@@ -254,7 +286,7 @@ void main() {
     tester,
   ) async {
     final pass = await openPass(tester);
-    expect(find.text('Desbloquear passe'), findsOneWidget);
+    expect(find.text('+10'), findsOneWidget);
     final fetches = pass.passFetches;
 
     // A loja liberou o premium; o painel não viu a compra acontecer.
@@ -263,7 +295,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(pass.passFetches, fetches + 1);
-    expect(find.text('Desbloquear passe'), findsNothing);
+    expect(find.text('Passe ativo'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -288,7 +320,7 @@ void main() {
 
     // O resgate falhou, então a recarga é o flush do fim da operação.
     expect(pass.passFetches, fetches + 1);
-    expect(find.text('Desbloquear passe'), findsNothing);
+    expect(find.text('Passe ativo'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -316,17 +348,34 @@ void main() {
     final pass = await openPass(tester, profileFails: true);
     final fetches = pass.passFetches;
 
-    await tester.tap(find.text('Desbloquear passe'));
-    await tester.pumpAndSettle();
+    await openPremiumDialog(tester);
     await tester.tap(find.text('Desbloquear'));
     await tester.pumpAndSettle();
 
-    // Mesmo caso do resgate: a compra vale, então o banner não fica
+    // Mesmo caso do resgate: a compra vale, então o painel não fica
     // oferecendo o desbloqueio de novo.
     expect(pass.calls, [('premium',)]);
     expect(find.text('Perfil indisponível.'), findsOneWidget);
-    expect(find.text('Desbloquear passe'), findsNothing);
+    expect(find.textContaining('Ativar passe'), findsNothing);
     expect(pass.passFetches, fetches + 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('resposta sem níveis avisa em vez de montar trilha vazia', (
+    tester,
+  ) async {
+    final pass = await openPass(tester, noTiers: true);
+    // O conversor aceita um payload sem `tiers`; a tela não pode procurar o
+    // nível em destaque numa trilha que não existe.
+    expect(find.text('Não foi possível carregar o passe.'), findsOneWidget);
+    expect(find.text('Grátis'), findsNothing);
+    expect(tester.takeException(), isNull);
+
+    final fetches = pass.passFetches;
+    await tester.tap(find.text('Tentar novamente'));
+    await tester.pumpAndSettle();
+    expect(pass.passFetches, fetches + 1);
+    expect(find.text('Não foi possível carregar o passe.'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

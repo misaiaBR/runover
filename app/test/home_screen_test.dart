@@ -627,7 +627,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(SeasonPassScreen), findsOneWidget);
     // Modo backend: a temporada vem do mock (`passStatus`).
-    expect(find.text('Temporada outubro de 2026'), findsOneWidget);
+    expect(find.text('outubro de 2026'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

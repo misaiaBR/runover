@@ -15,6 +15,7 @@ from app.services.spawns import (
     welcome_spawn_for,
     welcome_spawn_key,
 )
+from auth_helpers import create_verified_user
 
 NOW = datetime(2026, 5, 4, 12, 30, tzinfo=timezone.utc)
 LAT, LNG = -23.5505, -46.6333
@@ -98,15 +99,11 @@ def test_welcome_is_shared_between_rookies(client, registered_user, monkeypatch)
     monkeypatch.setattr(
         "app.services.spawns.snap_to_street", lambda *args: None
     )
-    second = client.post("/auth/register", json={
-        "full_name": "Second Runner",
-        "username": "secondrunner",
-        "email": "second@example.com",
-        "password": "original123",
-        "accept_terms": True,
-    })
-    assert second.status_code == 201
-    other = {"Authorization": f"Bearer {second.json()['access_token']}"}
+    second_token = create_verified_user(
+        client, username="secondrunner", email="second@example.com",
+        full_name="Second Runner", password="original123",
+    )
+    other = {"Authorization": f"Bearer {second_token}"}
     params = "/territories/wild?lat=-23.5&lng=-46.6&radius_km=0.2"
     first = client.get(params, headers=_auth(registered_user)).json()
     again = client.get(params, headers=other).json()

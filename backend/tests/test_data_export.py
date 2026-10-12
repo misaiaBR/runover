@@ -5,10 +5,13 @@ import unittest
 _tmp = tempfile.TemporaryDirectory()
 os.environ['DATABASE_URL'] = 'sqlite:///' + _tmp.name + '/test.db'
 os.environ['SECRET_KEY'] = 'local-test-signing-key-for-runover-tests'
+os.environ['MAIL_CONSOLE_FALLBACK'] = 'true'
+os.environ['BREVO_API_KEY'] = ''
 
 from fastapi.testclient import TestClient
 from app.core.database import Base, engine, initialize_database
 from app.main import app
+from auth_helpers import auth_headers
 
 
 class DataExportTests(unittest.TestCase):
@@ -17,15 +20,10 @@ class DataExportTests(unittest.TestCase):
         initialize_database()
         self.client = TestClient(app)
         self.client.__enter__()
-        response = self.client.post('/auth/register', json={
-            'full_name': 'Export Me', 'username': 'exportme',
-            'email': 'export@example.com', 'password': 'Password123',
-            'accept_terms': True,
-        })
-        assert response.status_code == 201, response.text
-        self.headers = {
-            'Authorization': 'Bearer ' + response.json()['access_token']
-        }
+        self.headers = auth_headers(
+            self.client, username='exportme', email='export@example.com',
+            full_name='Export Me',
+        )
 
     def tearDown(self):
         self.client.__exit__(None, None, None)
@@ -40,6 +38,8 @@ class DataExportTests(unittest.TestCase):
         ):
             self.assertIn(section, data)
         self.assertEqual(data['account']['email'], 'export@example.com')
+        # A confirmação do endereço é dado pessoal da conta: sai na exportação.
+        self.assertIsNotNone(data['account']['email_verified_at'])
         self.assertNotIn('password_hash', str(data))
         self.assertNotIn('Password123', str(data))
 

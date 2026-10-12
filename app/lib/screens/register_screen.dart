@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../services/api_client.dart';
 import '../state/app_state.dart';
+import 'email_confirmation_screen.dart';
 import 'terms_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -38,14 +39,29 @@ class _RegisterScreenState extends State<RegisterScreen> {
       _error = null;
     });
     try {
-      await context.read<AppState>().register(
+      final result = await context.read<AppState>().register(
         _nameCtrl.text.trim(),
         _usernameCtrl.text.trim(),
         _emailCtrl.text.trim(),
         _passwordCtrl.text,
         photoUrl: _photoCtrl.text.trim(),
       );
-      if (mounted) Navigator.of(context).popUntil((r) => r.isFirst);
+      if (!mounted) return;
+      if (!result.requiresVerification) {
+        Navigator.of(context).popUntil((r) => r.isFirst);
+        return;
+      }
+      // A conta foi criada, mas a porta ainda está fechada: sem o código do
+      // e-mail não há sessão e, portanto, não há aplicativo.
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => EmailConfirmationScreen(
+            email: result.email,
+            expiresInMinutes: result.expiresInMinutes,
+            resendAfterSeconds: result.resendAfterSeconds,
+          ),
+        ),
+      );
     } on ApiException catch (e) {
       setState(() => _error = e.message);
     } catch (_) {
@@ -133,6 +149,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
+                    Text(
+                      'Enviamos um código para o seu e-mail. Só depois de '
+                      'digitá-lo é que a conta entra no aplicativo.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
                     CheckboxListTile(
                       contentPadding: EdgeInsets.zero,
                       controlAffinity: ListTileControlAffinity.leading,

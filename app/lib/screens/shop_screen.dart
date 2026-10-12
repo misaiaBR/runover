@@ -1112,7 +1112,7 @@ class _ItemDetailSheet extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              _detailHint(item),
+              cosmeticHint(item.category),
               style: TextStyle(
                   fontSize: 14, color: scheme.onSurfaceVariant),
             ),
@@ -1222,18 +1222,5 @@ class _ItemDetailSheet extends StatelessWidget {
       ),
     );
   }
-}
-
-String _detailHint(ShopItem item) {
-  return switch (item.category) {
-    'avatar' => 'Decoração de avatar da galeria pronta.',
-    'frame' => 'Moldura ao redor do seu avatar no perfil.',
-    'effect' => 'Efeito animado sobre o cartão de perfil.',
-    'banner' => 'Faixa de fundo do seu perfil.',
-    'name_style' => 'Estilo do seu nome exibido no perfil.',
-    'emoticon' => 'Pacote de emoticons exibido no mural do perfil.',
-    'bundle' => 'Pacote com desconto: libera todos os itens listados.',
-    _ => 'Cosmético do seu perfil.',
-  };
 }
 

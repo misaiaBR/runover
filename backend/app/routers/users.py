@@ -336,6 +336,7 @@ def export_my_data(
             "full_name": current_user.full_name,
             "username": current_user.username,
             "email": current_user.email,
+            "email_verified_at": _iso(current_user.email_verified_at),
             "photo_url": current_user.photo_url,
             "is_public": current_user.is_public,
             "share_activities": current_user.share_activities,

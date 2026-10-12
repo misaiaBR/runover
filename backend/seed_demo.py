@@ -49,7 +49,19 @@ def register_or_login(full_name, username, email, photo=None):
         "password": "demo12345", "photo_url": photo, "accept_terms": True,
     })
     if st == 201:
-        return body["access_token"]
+        # Cadastro novo não devolve token: confirma o e-mail primeiro. Em
+        # desenvolvimento o código vem na resposta (MAIL_CONSOLE_FALLBACK).
+        code = body.get("debug_code")
+        if not code:
+            sys.exit(
+                f"Enviamos um código para {email}. Rode a API com "
+                "MAIL_CONSOLE_FALLBACK=true para popular o banco de demonstração "
+                "sem caixa de correio."
+            )
+        st, verified = call("POST", "/auth/verify-email", body={"email": email, "code": code})
+        if st != 200:
+            sys.exit(f"Falha ao confirmar {email}: {verified}")
+        return verified["access_token"]
     st, body = call("POST", "/auth/login", body={"email": email, "password": "demo12345"})
     if st != 200:
         sys.exit(f"Falha ao entrar como {email}: {body}")

@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../format.dart';
+import '../models.dart' show ShopItem;
+
+export '../models.dart' show ShopItem;
+
 /// Passe de Temporada: modelos da trilha horizontal de níveis.
 ///
 /// Cada nível tem uma recompensa grátis (faixa de cima) e uma do passe
@@ -32,12 +37,16 @@ enum RewardState {
 /// [title] é o rótulo completo (acessibilidade e o caso em que só há uma
 /// linha). [coins] e [itemName] vêm do servidor separados para o cartão poder
 /// pôr cada parte em sua linha em vez de espremer tudo numa frase só.
+/// [item] é o cosmético do catálogo: com ele, o painel de destaque mostra a
+/// prévia real do item (moldura, faixa, estilo de nome) em vez de um ícone
+/// genérico.
 class Reward {
   const Reward({
     required this.title,
     required this.icon,
     this.coins = 0,
     this.itemName,
+    this.item,
   });
 
   final String title;
@@ -48,17 +57,30 @@ class Reward {
 
   /// Nome do cosmético, quando o catálogo da loja o conhece.
   final String? itemName;
+
+  /// O cosmético em si, quando o catálogo o conhece.
+  final ShopItem? item;
+
+  /// Linha de texto do cartão: o nome do item manda, as dracmas acompanham.
+  String get label => itemName ?? (coins > 0 ? '+${formatPoints(coins)}' : title);
+  String? get subLabel =>
+      itemName != null && coins > 0 ? '+${formatPoints(coins)}' : null;
 }
 
 /// Um nível da temporada: recompensa grátis (cima) e do passe (baixo).
 class SeasonLevel {
   const SeasonLevel({
     required this.level,
+    required this.threshold,
     required this.free,
     required this.pass,
   });
 
   final int level;
+
+  /// Pontos acumuladas da temporada que abrem este nível (`threshold` do
+  /// servidor) — é o número que aparece no nó da trilha.
+  final int threshold;
   final Reward free;
   final Reward pass;
 }

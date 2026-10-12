@@ -8,6 +8,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
+from app.services.email_policy import is_disposable, normalize_email
+
 
 def _validate_password(v: str) -> str:
     # RN03 — mínimo 8 caracteres, letras e números
@@ -16,6 +18,19 @@ def _validate_password(v: str) -> str:
     if len(v.encode("utf-8")) > 72:
         raise ValueError("A senha deve ter no máximo 72 bytes em UTF-8.")
     return v
+
+
+def _validate_email(v: str) -> str:
+    """Um endereço por caixa de correio, e caixa descartável não é caixa.
+
+    Sem isso, o código de confirmação vira burocracia: quem cria contas em
+    série usa o mesmo Gmail com `+r1`, `+r2` e maiúsculas alternadas e passa
+    pelo portão quantas vezes quiser.
+    """
+    normalized = normalize_email(v)
+    if is_disposable(normalized):
+        raise ValueError("Esse domínio de e-mail não é aceito. Use um endereço seu.")
+    return normalized
 
 
 # ---------- Autenticação (RF01-RF04) ----------
@@ -33,6 +48,11 @@ class RegisterRequest(BaseModel):
     def validate_password(cls, v: str) -> str:
         return _validate_password(v)
 
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        return _validate_email(v)
+
     @field_validator("accept_terms")
     @classmethod
     def validate_terms(cls, v: bool) -> bool:
@@ -45,6 +65,11 @@ class LoginRequest(BaseModel):
     email: EmailStr
     password: str
 
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        return normalize_email(v)
+
 
 class OAuthLoginRequest(BaseModel):
     id_token: str = Field(min_length=20, max_length=8192)
@@ -55,14 +80,78 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
 
 
+class RegisterResponse(BaseModel):
+    """Cadastro criado, aguardando o código. Sem token: a conta não entra.
+
+    `debug_code` só vem preenchido quando o envio está em modo de console
+    (`MAIL_CONSOLE_FALLBACK`), para desenvolvimento e teste. Em produção o
+    campo é nulo.
+
+    As duas esperas (`expires_in_minutes`, `resend_after_seconds`) vêm do
+    servidor para o aplicativo não chutar um relógio que diverge do portão.
+    """
+
+    email: str
+    expires_in_minutes: int
+    resend_after_seconds: int
+    message: str
+    requires_verification: bool = True
+    debug_code: str | None = None
+
+
+class VerifyEmailRequest(BaseModel):
+    email: EmailStr
+    code: str = Field(min_length=6, max_length=12)
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        return normalize_email(v)
+
+    @field_validator("code")
+    @classmethod
+    def validate_code(cls, v: str) -> str:
+        if not v.isdigit():
+            raise ValueError("O código é numérico.")
+        return v
+
+
+class ResendVerificationRequest(BaseModel):
+    email: EmailStr
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        return normalize_email(v)
+
+
+class ResendVerificationResponse(BaseModel):
+    """Resposta única do reenvio: vale para conta existente, inexistente ou já
+    confirmada, e diz ao aplicativo quanto tempo esperar antes de outra tenta-
+    tiva."""
+
+    message: str
+    resend_after_seconds: int
+
+
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        return normalize_email(v)
 
 
 class ResetPasswordRequest(BaseModel):
     email: EmailStr | None = None
     reset_code: str | None = Field(default=None, min_length=6, max_length=128)
     new_password: str
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str | None) -> str | None:
+        return normalize_email(v) if v else v
 
     @model_validator(mode="after")
     def validate_reset_credential(self):

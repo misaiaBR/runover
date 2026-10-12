@@ -1,15 +1,12 @@
 """Reativação via login social: só com vínculo existente e verificado."""
 
 from app.models import OAuthIdentity, User
+from auth_helpers import auth_headers
 
 
 def _auth_headers(client, email="social@example.com"):
-    response = client.post("/auth/register", json={
-        "full_name": "Social Runner", "username": "socialrunner", "email": email,
-        "password": "secret123", "accept_terms": True,
-    })
-    assert response.status_code == 201, response.text
-    return {"Authorization": f"Bearer {response.json()['access_token']}"}
+    return auth_headers(client, username="socialrunner", email=email,
+                        full_name="Social Runner", password="secret123")
 
 
 def _link(db_session, client, headers, subject="google-sub-123"):

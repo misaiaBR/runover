@@ -102,6 +102,13 @@ class User(Base):
     # Desativação temporária (volta com reativação; diferente de excluir)
     is_active: Mapped[bool] = mapped_column(default=True)
     deactivated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Confirmação do endereço de e-mail. Nulo é conta criada que ainda não
+    # digitou o código: ela existe e reserva o nome de usuário, mas não entra
+    # no aplicativo. Quem entra por login social já nasce confirmado, porque o
+    # provedor respondeu email_verified.
+    email_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True
+    )
 
 
 class UserCosmetic(Base):
@@ -406,6 +413,27 @@ class PasswordReset(Base):
 
 class PasswordResetToken(Base):
     __tablename__ = "password_reset_tokens"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    token_hash: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+
+    user: Mapped["User"] = relationship()
+
+
+class EmailVerificationToken(Base):
+    """Código de confirmação do endereço, enviado no cadastro.
+
+    Mesmo formato do token de recuperação porque resolve o mesmo problema: um
+    número entregue por e-mail, com validade curta, uso único e tentativas
+    contadas. Ficar sem ele é ficar sem entrar — por isso o hash é o que fica
+    no banco, nunca o código em texto.
+    """
+
+    __tablename__ = "email_verification_tokens"
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     token_hash: Mapped[str] = mapped_column(String, unique=True, nullable=False)

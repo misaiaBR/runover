@@ -1,3 +1,6 @@
+from auth_helpers import auth_headers
+
+
 def _auth(registered_user):
     return {"Authorization": f"Bearer {registered_user['token']}"}
 
@@ -39,15 +42,10 @@ def test_deactivate_blocks_login_and_reactivate_restores(client, registered_user
 def test_deactivated_profile_hidden_from_others(client, registered_user, db_session):
     from app.models import User
 
-    other = client.post("/auth/register", json={
-        "full_name": "Other Person",
-        "username": "otherperson",
-        "email": "other@example.com",
-        "password": "otherpass123",
-        "accept_terms": True,
-    })
-    assert other.status_code == 201
-    other_headers = {"Authorization": f"Bearer {other.json()['access_token']}"}
+    other_headers = auth_headers(
+        client, username="otherperson", email="other@example.com",
+        full_name="Other Person", password="otherpass123",
+    )
 
     assert client.post("/users/me/deactivate", headers=_auth(registered_user)).status_code == 204
     assert client.get("/users/testrunner", headers=other_headers).status_code == 404

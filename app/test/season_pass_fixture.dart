@@ -1,6 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:runover_app/season_pass/models.dart';
 
+/// Prévia de catálogo: o cartão desenha o cosmético de verdade, então os
+/// testes precisam de um item realista — mas nada aqui é catálogo do jogo, a
+/// tela de produção lê `GET /shop/catalog?scope=pass`.
+const bannerReward = ShopItem(
+  id: 'test_banner',
+  category: 'banner',
+  name: 'Faixa de teste',
+  price: 0,
+  payload: {'colors': ['#2FB7A0', '#1F8D7B']},
+);
+
+const frameReward = ShopItem(
+  id: 'test_frame',
+  category: 'frame',
+  name: 'Moldura de teste',
+  price: 0,
+  payload: {'colors': ['#FFB21A']},
+);
+
 /// Temporada longa, para os testes de rolagem da trilha.
 ///
 /// Cada cartão tem um título próprio ("L12 grátis"), então dá para afirmar o
@@ -19,6 +38,7 @@ Season longSeason({int levels = 30, int currentLevel = 12}) {
       for (var level = 1; level <= levels; level++)
         SeasonLevel(
           level: level,
+          threshold: level * 200,
           free: Reward(title: 'L$level grátis', icon: Icons.redeem),
           pass: Reward(
             title: 'L$level passe',
@@ -31,28 +51,33 @@ Season longSeason({int levels = 30, int currentLevel = 12}) {
 
 /// Temporada de exemplo usada só pelos testes do Passe de Temporada.
 ///
-/// Nível 4 alcançado, faixas grátis dos níveis 1–3 já resgatadas e passe não
-/// adquirido — assim os quatro estados aparecem: resgatado (1–3 grátis),
-/// resgatável (4 grátis), requer passe (1–4 do passe) e bloqueado (5–7).
+/// Nível 4 alcançado (400 pts), faixas grátis dos níveis 1–3 já resgatadas e
+/// passe não adquirido — assim os quatro estados aparecem: resgatado (1–3
+/// grátis), resgatável (4 grátis), requer passe (1–4 do passe) e bloqueado
+/// (5–7). Os limiares vão de 100 em 100 pts e são os números que aparecem nos
+/// nós da trilha.
 ///
-/// O que a tela mostra em produção vem de `GET /pass` (`season_pass/backend.dart`);
-/// nada aqui é catálogo do jogo.
+/// O nível 4 grátis soma dracmas a uma faixa da galeria: é o cartão que exerce
+/// o nome do item, as dracmas na linha de baixo e a prévia real lado a lado.
 Season demoSeason() {
   return Season(
     name: 'Aurora',
     endsAt: DateTime.now().add(const Duration(days: 17, hours: 21)),
     currentLevel: 4,
-    points: 320,
+    points: 420,
     pointsForNext: 500,
-    // O nível 4 abriu em 300 pts: a barra do card mede o trecho 300→500.
-    levelStartPoints: 300,
+    // O nível 4 abriu em 400 pts: a barra mede o trecho 400→500.
+    levelStartPoints: 400,
+    premiumPriceCoins: 1200,
     claimed: const {'1-free', '2-free', '3-free'},
     levels: const [
       SeasonLevel(
         level: 1,
+        threshold: 100,
         free: Reward(
-          title: '100 dracmas',
+          title: '+100 dracmas',
           icon: Icons.monetization_on_outlined,
+          coins: 100,
         ),
         pass: Reward(
           title: 'Moldura de avatar',
@@ -61,33 +86,62 @@ Season demoSeason() {
       ),
       SeasonLevel(
         level: 2,
-        free: Reward(title: 'Cor de zona', icon: Icons.hexagon_outlined),
-        pass: Reward(title: 'Efeito de conquista', icon: Icons.auto_awesome),
+        threshold: 200,
+        free: Reward(
+          title: '+200 dracmas',
+          icon: Icons.monetization_on_outlined,
+          coins: 200,
+        ),
+        pass: Reward(
+          title: 'Moldura do passe',
+          icon: Icons.auto_awesome,
+          itemName: 'Moldura de teste',
+          item: frameReward,
+        ),
       ),
       SeasonLevel(
         level: 3,
+        threshold: 300,
         free: Reward(
-          title: 'Título “Madrugador”',
-          icon: Icons.military_tech_outlined,
+          title: '+300 dracmas',
+          icon: Icons.monetization_on_outlined,
+          coins: 300,
         ),
-        pass: Reward(title: 'Emblema de equipe', icon: Icons.shield_outlined),
+        pass: Reward(
+          title: 'Emblema de equipe',
+          icon: Icons.shield_outlined,
+        ),
       ),
       SeasonLevel(
         level: 4,
-        free: Reward(title: 'Baú de dracmas', icon: Icons.redeem),
+        threshold: 400,
+        free: Reward(
+          title: 'Faixa de teste · +400 dracmas',
+          icon: Icons.redeem,
+          coins: 400,
+          itemName: 'Faixa de teste',
+          item: bannerReward,
+        ),
         pass: Reward(title: 'Cor exclusiva', icon: Icons.palette_outlined),
       ),
       SeasonLevel(
         level: 5,
+        threshold: 500,
         free: Reward(
-          title: '300 dracmas',
+          title: '+500 dracmas',
           icon: Icons.monetization_on_outlined,
+          coins: 500,
         ),
         pass: Reward(title: 'Moldura de equipe', icon: Icons.shield_outlined),
       ),
       SeasonLevel(
         level: 6,
-        free: Reward(title: 'Cor de zona', icon: Icons.hexagon_outlined),
+        threshold: 600,
+        free: Reward(
+          title: '+600 dracmas',
+          icon: Icons.monetization_on_outlined,
+          coins: 600,
+        ),
         pass: Reward(
           title: 'Título exclusivo',
           icon: Icons.military_tech_outlined,
@@ -95,7 +149,12 @@ Season demoSeason() {
       ),
       SeasonLevel(
         level: 7,
-        free: Reward(title: 'Baú de dracmas', icon: Icons.redeem),
+        threshold: 700,
+        free: Reward(
+          title: '+700 dracmas',
+          icon: Icons.monetization_on_outlined,
+          coins: 700,
+        ),
         pass: Reward(title: 'Base animada', icon: Icons.hexagon),
       ),
     ],

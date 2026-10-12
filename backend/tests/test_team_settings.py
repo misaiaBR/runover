@@ -7,20 +7,16 @@ modo e o filtro da descoberta.
 """
 
 
+from auth_helpers import create_verified_user
+
+
 def _auth(token):
     return {"Authorization": f"Bearer {token}"}
 
 
 def _register(client, username, email):
-    response = client.post("/auth/register", json={
-        "full_name": username.title(),
-        "username": username,
-        "email": email,
-        "password": "Password123",
-        "accept_terms": True,
-    })
-    assert response.status_code == 201, response.text
-    return response.json()["access_token"]
+    return create_verified_user(client, username=username, email=email,
+                                full_name=username.title())
 
 
 def _owner_and_team(client, registered_user, name="Time Ajustes"):

@@ -107,8 +107,11 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> login(String email, String password) async {
-    await api.login(email: email, password: password);
+  /// Abre a sessão depois de qualquer prova de identidade aceita pelo servidor
+  /// (senha, código do e-mail, login social). O perfil é consequência: se a
+  /// leitura falhar por outro motivo que não credencial, a pessoa já está
+  /// dentro e continua dentro.
+  Future<void> _enterAuthenticated() async {
     status = AuthStatus.signedIn;
     pingPresence();
     try {
@@ -119,71 +122,59 @@ class AppState extends ChangeNotifier {
       profile = null;
     }
     notifyListeners();
+  }
+
+  Future<void> login(String email, String password) async {
+    await api.login(email: email, password: password);
+    await _enterAuthenticated();
   }
 
   /// Reativa uma conta desativada temporariamente (volta tudo como estava).
   Future<void> reactivate(String email, String password) async {
     await api.reactivate(email: email, password: password);
-    status = AuthStatus.signedIn;
-    pingPresence();
-    try {
-      profile = await api.getMyProfile();
-      unawaited(_retryPendingRunsQuietly());
-    } on ApiException catch (e) {
-      if (e.statusCode == 401) rethrow;
-      profile = null;
-    }
-    notifyListeners();
+    await _enterAuthenticated();
   }
 
   Future<void> loginWithOAuth(String provider, String idToken) async {
     await api.loginWithOAuth(provider: provider, idToken: idToken);
-    status = AuthStatus.signedIn;
-    pingPresence();
-    try {
-      profile = await api.getMyProfile();
-      unawaited(_retryPendingRunsQuietly());
-    } on ApiException catch (e) {
-      if (e.statusCode == 401) rethrow;
-      profile = null;
-    }
-    notifyListeners();
+    await _enterAuthenticated();
   }
 
   /// Reativa via login social a partir da identidade verificada.
   Future<void> reactivateWithOAuth(String provider, String idToken) async {
     await api.reactivateWithOAuth(provider: provider, idToken: idToken);
-    status = AuthStatus.signedIn;
-    pingPresence();
-    try {
-      profile = await api.getMyProfile();
-      unawaited(_retryPendingRunsQuietly());
-    } on ApiException catch (e) {
-      if (e.statusCode == 401) rethrow;
-      profile = null;
-    }
-    notifyListeners();
+    await _enterAuthenticated();
   }
 
-  Future<void> register(
+  /// Entrada pelo código que chegou no e-mail: é o portão do cadastro, e o
+  /// único caminho para dentro de uma conta recém-criada.
+  Future<void> confirmEmail({
+    required String email,
+    required String code,
+  }) async {
+    await api.verifyEmail(email: email, code: code);
+    await _enterAuthenticated();
+  }
+
+  /// Cria a conta. Quando o servidor exige a confirmação do e-mail, devolve o
+  /// resultado sem sessão: quem chama leva a pessoa para digitar o código.
+  Future<RegistrationResult> register(
     String fullName,
     String username,
     String email,
     String password, {
     String? photoUrl,
   }) async {
-    await api.register(
+    final result = await api.register(
       fullName: fullName,
       username: username,
       email: email,
       password: password,
       photoUrl: photoUrl,
     );
-    profile = await api.getMyProfile();
-    status = AuthStatus.signedIn;
-    pingPresence();
-    unawaited(_retryPendingRunsQuietly());
-    notifyListeners();
+    if (result.requiresVerification) return result;
+    await _enterAuthenticated();
+    return result;
   }
 
   void applyUpdatedProfile(UserProfile updated) {

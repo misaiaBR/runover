@@ -6,20 +6,19 @@ from datetime import datetime, timedelta, timezone
 _tmp = tempfile.TemporaryDirectory()
 os.environ['DATABASE_URL'] = 'sqlite:///' + _tmp.name + '/test.db'
 os.environ['SECRET_KEY'] = 'local-test-signing-key-for-runover-tests'
+os.environ['MAIL_CONSOLE_FALLBACK'] = 'true'
+os.environ['BREVO_API_KEY'] = ''
 
 from fastapi.testclient import TestClient
 from app.core.database import Base, SessionLocal, engine, initialize_database
 from app.main import app
 from app.models import LocationPing, User
+from auth_helpers import auth_headers
 
 
 def _register(client, username, email):
-    response = client.post('/auth/register', json={
-        'full_name': username.title(), 'username': username,
-        'email': email, 'password': 'Password123', 'accept_terms': True,
-    })
-    assert response.status_code == 201, response.text
-    return {'Authorization': 'Bearer ' + response.json()['access_token']}
+    return auth_headers(client, username=username, email=email,
+                        full_name=username.title())
 
 
 class TeamApprovalTests(unittest.TestCase):
