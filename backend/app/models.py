@@ -12,10 +12,36 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     text,
+    JSON,
+    func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+
+
+class DbShopItem(Base):
+    __tablename__ = "shop_items"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    category: Mapped[str] = mapped_column(String, nullable=False)
+    price: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    scope: Mapped[str] = mapped_column(String, nullable=False, default="user")
+    payload: Mapped[dict] = mapped_column(JSON, nullable=False, default={})
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "category": self.category,
+            "price": self.price,
+            "scope": self.scope,
+            "payload": self.payload,
+        }
 
 
 def _uuid() -> str:

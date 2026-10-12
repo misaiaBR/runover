@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db, lock_mutations
 from app.core.security import get_current_user
-from app.models import CoinTransaction, User, UserItem
+from app.models import CoinTransaction, User, UserItem, DbShopItem
 from app.schemas import (
     EquipRequest,
     Inventory,
@@ -15,7 +15,7 @@ from app.schemas import (
     WalletEntry,
 )
 from app.services.coins import debit
-from app.services.shop import CATEGORIES, EQUIPPABLE, SCOPES, get_item, list_items
+from app.services.shop import CATEGORIES, EQUIPPABLE, SCOPES, get_item, list_items, BY_ID, CATALOG
 
 router = APIRouter(prefix="/shop", tags=["mercado"])
 
@@ -44,11 +44,30 @@ def _inventory_of(db: Session, user: User) -> Inventory:
 def catalog(
     category: str | None = Query(default=None),
     scope: str | None = Query(default=None),
+    db: Session = Depends(get_db),
 ):
+    # Tenta buscar itens do banco de dados primeiro (catálogo dinâmico)
+    db_items = db.query(DbShopItem).all()
+    if db_items:
+        # Converter do banco para o formato do catálogo
+        items = [item.to_dict() for item in db_items]
+    else:
+        # Fallback para catálogo código-based
+        items = list(CATALOG)
+    
     if category is not None and category not in CATEGORIES:
         raise HTTPException(400, "Categoria inválida.")
     if scope is not None and scope not in SCOPES:
         raise HTTPException(400, "Escopo inválido.")
+    
+    result = list_items(category, scope)
+    # Se temos itens do banco, filtrar; caso contrário, usar o resultado do catálogo código
+    if db_items:
+        if category is not None:
+            result = [i for i in result if i["category"] == category]
+        if scope is not None:
+            result = [i for i in result if i.get("scope", "user") == scope]
+        return result
     return list_items(category, scope)
 
 
