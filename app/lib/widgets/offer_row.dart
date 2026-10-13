@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../format.dart';
 import '../models.dart';
-import '../services/profile_image_provider.dart';
 import 'cosmetics.dart';
 import 'runover_ui.dart';
 
@@ -231,23 +230,11 @@ class ShopPreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return switch (item.category) {
-      'avatar' => Builder(
-        builder: (context) {
-          final asset = galleryAvatarAsset(item);
-          final style = generatedAvatarStyle(item);
-          return FramedAvatar(
-            radius: 34 * scale,
-            image: asset == null
-                ? (style == null
-                      ? null
-                      : NetworkImage(
-                          diceBearAvatarUrl(item.id, style: style),
-                        ))
-                : AssetImage(asset),
-            fallbackLetter: item.name.isEmpty ? '?' : item.name[0],
-            avatarItem: item,
-          );
-        },
+      'avatar' => FramedAvatar(
+        radius: 34 * scale,
+        image: profileAvatarImage(null, item),
+        fallbackLetter: item.name.isEmpty ? '?' : item.name[0],
+        avatarItem: item,
       ),
       'frame' => FramedAvatar(
         radius: 34 * scale,

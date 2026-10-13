@@ -98,7 +98,13 @@ Map<String, dynamic> _avatar(String id, String name, int price) => {
       'category': 'avatar',
       'name': name,
       'price': price,
-      'payload': {'asset': 'corredor', 'animated': false},
+      // Rosto vem da API de avatares com a seed do próprio item.
+      'payload': {
+        'generated': 'adventurer',
+        'seed': id,
+        'animated': false,
+        'tier': 1,
+      },
     };
 
 void main() {

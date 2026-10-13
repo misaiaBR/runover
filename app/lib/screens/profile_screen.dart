@@ -505,7 +505,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                               image: profileAvatarImage(
                                                 profile.photoUrl,
                                                 avatarItem,
-                                                seed: profile.username,
                                               ),
                                               fallbackLetter:
                                                   profile.username.isEmpty

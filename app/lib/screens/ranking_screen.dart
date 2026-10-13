@@ -695,11 +695,7 @@ class _RankingScreenState extends State<RankingScreen> {
         : entry.name.characters.first.toUpperCase();
     final avatar = FramedAvatar(
       radius: radius,
-      image: profileAvatarImage(
-        entry.photoUrl,
-        avatarItem,
-        seed: entry.name,
-      ),
+      image: profileAvatarImage(entry.photoUrl, avatarItem),
       fallbackLetter: initial,
       frame: frame,
       avatarItem: avatarItem,

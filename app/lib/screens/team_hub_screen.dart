@@ -6,7 +6,6 @@ import 'package:provider/provider.dart';
 import '../format.dart';
 import '../models.dart';
 import '../services/api_client.dart';
-import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
 import '../widgets/centered_content.dart';
 import '../widgets/cosmetics.dart';
@@ -316,16 +315,11 @@ class _TeamHeader extends StatelessWidget {
     final banner = findItem(catalog, team.equippedBanner);
     final nameStyle = findItem(catalog, team.equippedNameStyle);
     final effect = findItem(catalog, team.equippedEffect);
-    final avatarAsset = galleryAvatarAsset(
-      findItem(catalog, team.equippedAvatar),
-    );
+    final avatarItem = findItem(catalog, team.equippedAvatar);
     final gradient = bannerGradient(banner);
-    ImageProvider? image;
-    if (team.photoUrl?.isNotEmpty == true) {
-      image = profileImageProvider(team.photoUrl);
-    } else if (avatarAsset != null) {
-      image = AssetImage(avatarAsset);
-    }
+    // O rosto do emblema é o do item equipado (seed = id do item); a foto da
+    // equipe só aparece quando não há avatar da loja.
+    final image = profileAvatarImage(team.photoUrl, avatarItem);
     return Stack(
       children: [
         Container(

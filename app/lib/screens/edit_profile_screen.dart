@@ -196,15 +196,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   Future<void> _showPresetAvatars() async {
     if (_saving) return;
     final app = context.read<AppState>();
-    final username = _username.text.trim().isEmpty
-        ? widget.profile.username
-        : _username.text.trim();
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
       builder: (_) => AvatarShopSheet(
-        username: username,
         api: app.api,
         onChanged: () => app.refreshProfile(),
       ),

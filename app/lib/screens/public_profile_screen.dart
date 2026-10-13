@@ -140,7 +140,6 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                                               image: profileAvatarImage(
                                                 p.photoUrl,
                                                 avatarItem,
-                                                seed: p.username,
                                               ),
                                               fallbackLetter:
                                                   p.username.isNotEmpty

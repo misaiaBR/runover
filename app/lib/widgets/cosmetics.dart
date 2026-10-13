@@ -1,6 +1,6 @@
 /// Renderização dos cosméticos do mercado (molduras, faixas, estilos de
-/// nome, efeitos e avatares animados da galeria pronta). Tudo é desenhado
-/// em Flutter a partir do `payload` do catálogo (via API) — sem binários.
+/// nome, efeitos e avatares). Tudo é desenhado em Flutter a partir do
+/// `payload` do catálogo (via API) — sem binários.
 ///
 /// [cosmeticHint] é a frase que diz o que cada categoria faz no perfil: a
 /// loja e o painel do passe descrevem o mesmo item com as mesmas palavras.
@@ -17,7 +17,7 @@ import 'runover_ui.dart';
 
 /// O que a categoria do cosmético entrega no perfil.
 String cosmeticHint(String category) => switch (category) {
-  'avatar' => 'Decoração de avatar da galeria pronta.',
+  'avatar' => 'Rosto exclusivo do avatar, com acabamento próprio.',
   'frame' => 'Moldura ao redor do seu avatar no perfil.',
   'effect' => 'Efeito animado sobre o cartão de perfil.',
   'banner' => 'Faixa de fundo do seu perfil.',
@@ -80,12 +80,23 @@ class _FramedAvatarState extends State<FramedAvatar>
       (widget.frame?.payload['animated'] == true) ||
       (widget.avatarItem?.payload['animated'] == true);
 
+  /// O anel veste o patamar mais alto entre moldura e avatar: quem paga mais por
+  /// um item vê o item se mexendo mais, e isso é conta do servidor (`tier`).
+  int get _tier {
+    final frame = animationTier(widget.frame);
+    final avatar = animationTier(widget.avatarItem);
+    return frame > avatar ? frame : avatar;
+  }
+
+  /// 1 respira devagar, 4 corre. Sem isto todo item animado teria o mesmo pulso.
+  Duration get _pulse => Duration(milliseconds: 1500 - 250 * _tier);
+
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1400),
+      duration: _pulse,
     );
     if (_animated) _controller.repeat(reverse: true);
   }
@@ -96,9 +107,18 @@ class _FramedAvatarState extends State<FramedAvatar>
     final was = (oldWidget.frame?.payload['animated'] == true) ||
         (oldWidget.avatarItem?.payload['animated'] == true);
     if (_animated && !was) {
+      _controller.duration = _pulse;
       _controller.repeat(reverse: true);
     } else if (!_animated && was) {
       _controller.stop();
+    } else if (_animated) {
+      // Item trocado na mesma tela: `repeat()` grava o período no instante em
+      // que é chamado, então mexer só na duração deixaria o anel respirando no
+      // ritmo do item anterior. Reiniciar mantém o valor atual e adota o pulso
+      // do patamar novo.
+      _controller
+        ..duration = _pulse
+        ..repeat(reverse: true);
     }
   }
 
@@ -148,6 +168,7 @@ class _FramedAvatarState extends State<FramedAvatar>
       child: avatar,
     );
     if (!_animated) return ring;
+    final tier = _tier;
     return AnimatedBuilder(
       animation: _controller,
       builder: (_, child) {
@@ -158,17 +179,94 @@ class _FramedAvatarState extends State<FramedAvatar>
             boxShadow: [
               BoxShadow(
                 color: colors.first.withValues(alpha: .5 * glow),
-                blurRadius: 18 * glow,
+                blurRadius: (12 + 4 * tier) * glow,
                 spreadRadius: 2 * glow,
               ),
             ],
           ),
-          child: child,
+          child: CustomPaint(
+            foregroundPainter: RingLifePainter(
+              progress: _controller.value,
+              colors: colors,
+              tier: tier,
+              sparkInk: inkOnAccent(colors.first),
+            ),
+            child: child,
+          ),
         );
       },
       child: ring,
     );
   }
+}
+
+/// A vida do anel, desenhada por cima da borda: varredura de luz a partir do
+/// patamar 2 e partículas orbitando o aro a partir do 3. O traço fica dentro da
+/// caixa do próprio anel — nada aqui muda o tamanho que o perfil reserva.
+class RingLifePainter extends CustomPainter {
+  RingLifePainter({
+    required this.progress,
+    required this.colors,
+    required this.tier,
+    required this.sparkInk,
+  });
+  final double progress;
+  final List<Color> colors;
+  final int tier;
+  final Color sparkInk;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (tier < 2 || colors.isEmpty || size.isEmpty) return;
+    final side = math.min(size.width, size.height);
+    final box = Rect.fromLTWH(
+      (size.width - side) / 2,
+      (size.height - side) / 2,
+      side,
+      side,
+    );
+    final arc = box.deflate(1.5);
+    final rotation = progress * math.pi * 2;
+    final first = colors.first;
+    canvas.drawArc(
+      arc,
+      rotation,
+      1.1,
+      false,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeWidth = 2
+        ..shader = LinearGradient(
+          colors: [
+            first.withValues(alpha: 0),
+            sparkInk.withValues(alpha: .9),
+            first.withValues(alpha: 0),
+          ],
+          stops: const [0, .5, 1],
+        ).createShader(arc),
+    );
+    if (tier < 3) return;
+    final radius = arc.width / 2;
+    for (var spark = 0; spark < 3; spark++) {
+      final angle = -rotation * 1.4 + spark * math.pi * 2 / 3;
+      canvas.drawCircle(
+        Offset(
+          arc.center.dx + math.cos(angle) * radius,
+          arc.center.dy + math.sin(angle) * radius,
+        ),
+        2,
+        Paint()..color = sparkInk.withValues(alpha: .95),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(RingLifePainter old) =>
+      old.progress != progress ||
+      old.tier != tier ||
+      old.sparkInk != sparkInk ||
+      old.colors.length != colors.length;
 }
 
 /// Respiração sutil em loop para prévias sem animação própria
@@ -348,15 +446,6 @@ class _ProfileEffectOverlayState extends State<ProfileEffectOverlay>
   }
 }
 
-/// Avatar da galeria pronta: resolve o asset pelo `payload['asset']`.
-/// A galeria vive em `assets/avatars/`; itens animados usam o mesmo
-/// asset com anel animado (FramedAvatar).
-String? galleryAvatarAsset(ShopItem? item) {
-  final asset = item?.payload['asset'];
-  if (asset is! String || asset.isEmpty) return null;
-  return 'assets/avatars/avatar_$asset.png';
-}
-
 /// Estilo DiceBear do item gerado (`payload['generated']`), ou null.
 String? generatedAvatarStyle(ShopItem? item) {
   final style = item?.payload['generated'];
@@ -366,18 +455,33 @@ String? generatedAvatarStyle(ShopItem? item) {
   return style;
 }
 
-/// Provedor de imagem do perfil: avatar da loja (galeria pronta ou gerado
-/// com seed = apelido do dono) e, por último, a foto enviada.
-ImageProvider? profileAvatarImage(
-  String? photoUrl,
-  ShopItem? avatarItem, {
-  String? seed,
-}) {
-  final asset = galleryAvatarAsset(avatarItem);
-  if (asset != null) return AssetImage(asset);
+/// O rosto do item, não o de quem o equipou.
+///
+/// O servidor põe `seed` no payload de cada avatar da API (é o id do item) para
+/// que a vitrine, a folha de escolha, o perfil de quem equipou e o cartão de
+/// ranking mostrem a mesma figura. Seed por apelido fazia o "Corredor" da loja
+/// ser um rosto e o "Corredor" equipado ser outro.
+String avatarSeed(ShopItem item) {
+  final seed = item.payload['seed'];
+  if (seed is String && seed.isNotEmpty) return seed;
+  return item.id;
+}
+
+/// Provedor de imagem do perfil: o avatar da loja (a figura é do item) e, por
+/// último, a foto enviada.
+ImageProvider? profileAvatarImage(String? photoUrl, ShopItem? avatarItem) {
   final style = generatedAvatarStyle(avatarItem);
-  if (style != null) {
-    return NetworkImage(diceBearAvatarUrl(seed ?? '', style: style));
+  if (style != null && avatarItem != null) {
+    return NetworkImage(diceBearAvatarUrl(avatarSeed(avatarItem), style: style));
   }
   return profileImageProvider(photoUrl);
+}
+
+/// A escada de animação do item: 1 pulsa, 2 varre, 3 acende partículas, 4 corre
+/// mais rápido. É o `tier` que o catálogo calcula pelo preço, não uma aposta do
+/// app — sem ele, um anel de bronze e uma moldura de diamante respirariam igual.
+int animationTier(ShopItem? item) {
+  final tier = item?.payload['tier'];
+  if (tier is! num) return 1;
+  return tier.toInt().clamp(1, 4);
 }

@@ -3,23 +3,24 @@ import 'package:flutter/material.dart';
 import '../models.dart';
 import '../services/api_client.dart';
 import '../services/profile_image_provider.dart';
+import 'cosmetics.dart';
 import 'runover_ui.dart';
 
 /// Galeria de avatares do editor de perfil: tudo custa moedas do jogo.
 ///
-/// Duas seções — "Galeria" (assets prontos, `avatar_<asset>`) e "Gerados"
-/// (DiceBear por estilo, `avatar_gerado_<estilo>`, seed = apelido).
-/// Tocar compra (se preciso) e equipa o item da loja; foto enviada por
-/// upload/link continua gratuita por ser identidade, não cosmético.
+/// Duas seções — "Galeria" (os itens históricos de `avatar_<nome>`) e "Gerados"
+/// (um por estilo da API, `avatar_gerado_<estilo>`). Cada rosto é desenhado a
+/// partir do payload do próprio item, então o que se escolhe aqui é exatamente o
+/// que aparece na vitrine e no cartão de quem equipou. Tocar compra (se preciso)
+/// e equipa; foto enviada por upload continua gratuita por ser identidade, não
+/// cosmético.
 class AvatarShopSheet extends StatefulWidget {
   const AvatarShopSheet({
     super.key,
-    required this.username,
     required this.api,
     required this.onChanged,
   });
 
-  final String username;
   final ApiClient api;
   final Future<void> Function() onChanged;
 
@@ -170,31 +171,19 @@ class _AvatarShopSheetState extends State<AvatarShopSheet> {
                     );
                   }
                   final data = snapshot.data!;
+                  // O catálogo decide o nome e o rosto de cada seção; a folha só
+                  // escolhe quais itens entram nela.
                   final gallery = [
                     for (final preset in presetAvatars)
-                      (
-                        _byId(data.catalog, 'avatar_${_assetName(preset)}'),
-                        preset.label,
-                        AssetImage(preset.asset) as ImageProvider,
-                      ),
-                  ].where((e) => e.$1 != null).toList();
+                      ?_byId(data.catalog, 'avatar_${_assetName(preset)}'),
+                  ];
                   final generated = [
                     for (final style in diceBearAvatarStyles)
-                      (
-                        _byId(
-                          data.catalog,
-                          'avatar_gerado_${style.replaceAll('-', '_')}',
-                        ),
-                        style,
-                        NetworkImage(
-                          diceBearAvatarUrl(
-                            widget.username,
-                            style: style,
-                          ),
-                        )
-                            as ImageProvider,
+                      ?_byId(
+                        data.catalog,
+                        'avatar_gerado_${style.replaceAll('-', '_')}',
                       ),
-                  ].where((e) => e.$1 != null).toList();
+                  ];
                   return SingleChildScrollView(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -227,10 +216,7 @@ class _AvatarShopSheetState extends State<AvatarShopSheet> {
     );
   }
 
-  Widget _grid(
-    _AvatarShopData data,
-    List<(ShopItem?, String, ImageProvider)> entries,
-  ) {
+  Widget _grid(_AvatarShopData data, List<ShopItem> items) {
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -240,16 +226,17 @@ class _AvatarShopSheetState extends State<AvatarShopSheet> {
         crossAxisSpacing: 12,
         childAspectRatio: 0.8,
       ),
-      itemCount: entries.length,
+      itemCount: items.length,
       itemBuilder: (_, i) {
-        final item = entries[i].$1!;
-        final label = entries[i].$2;
-        final image = entries[i].$3;
+        final item = items[i];
+        // O rosto vem do payload do item, exatamente como na vitrine e no cartão
+        // de quem equipou — a folha não desenha uma figura e a loja outra.
+        final image = profileAvatarImage(null, item);
         final owned = data.inventory.owned.contains(item.id);
         final equipped = data.inventory.equippedAvatar == item.id;
         final busy = _busyId == item.id;
         return InkWell(
-          key: Key('preset-avatar-$label'),
+          key: Key('preset-avatar-${item.name}'),
           borderRadius: BorderRadius.circular(16),
           onTap: busy ? null : () => _select(item, owned),
           child: Column(
@@ -260,14 +247,18 @@ class _AvatarShopSheetState extends State<AvatarShopSheet> {
                   children: [
                     ClipRRect(
                       borderRadius: BorderRadius.circular(16),
-                      child: Image(
-                        image: image,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => const Icon(
-                          Icons.face_outlined,
-                          size: 32,
-                        ),
-                      ),
+                      child: image == null
+                          ? const Center(
+                              child: Icon(Icons.face_outlined, size: 32),
+                            )
+                          : Image(
+                              image: image,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, _, _) => const Icon(
+                                Icons.face_outlined,
+                                size: 32,
+                              ),
+                            ),
                     ),
                     if (equipped)
                       Positioned(
