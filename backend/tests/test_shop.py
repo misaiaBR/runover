@@ -3,7 +3,7 @@ from uuid import uuid4
 
 from app.models import CoinTransaction, UserItem
 from app.services import coins
-from app.services.shop import CATALOG, get_item
+from app.services.shop import CATALOG, SCOPES, get_item
 
 
 def _track(num_points=70, offset_minutes=0):
@@ -41,6 +41,34 @@ def test_catalog_lists_all_categories(client):
     assert len(items) == len(CATALOG)
     categories = {i["category"] for i in items}
     assert {"avatar", "frame", "effect", "banner", "name_style", "emoticon"} <= categories
+
+
+def test_each_shop_lists_only_its_own_scope(client):
+    """As três lojas são independentes, e juntas são o catálogo inteiro.
+
+    O Mercado pede `scope=user`, a Loja da equipe `scope=team`, o Passe
+    `scope=pass`. Item de outro escopo na lista é vitrine mentirosa: o toque
+    chega no servidor e a compra recusa. E item que não aparece em escopo
+    nenhum é item que não existe para ninguém.
+    """
+    ids_by_scope: dict[str, set[str]] = {}
+    for scope in SCOPES:
+        items = client.get("/shop/catalog", params={"scope": scope}).json()
+        assert items, scope
+        assert {item["scope"] for item in items} == {scope}
+        ids_by_scope[scope] = {item["id"] for item in items}
+
+    scopes = list(SCOPES)
+    for index, left in enumerate(scopes):
+        for right in scopes[index + 1:]:
+            assert not (ids_by_scope[left] & ids_by_scope[right]), (left, right)
+    assert set().union(*ids_by_scope.values()) == {item["id"] for item in CATALOG}
+
+
+def test_catalog_rejects_an_unknown_scope(client):
+    response = client.get("/shop/catalog", params={"scope": "equipe"})
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Escopo inválido."
 
 
 def test_everything_is_animated(client):

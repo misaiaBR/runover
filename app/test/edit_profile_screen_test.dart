@@ -680,6 +680,9 @@ void main() {
     final client = MockClient((request) async {
       final path = request.url.path;
       if (request.method == 'GET' && path == '/shop/catalog') {
+        // A "Escolha um avatar" é a loja pessoal: emblema da equipe e item do
+        // Passe não se compram com a carteira do jogador.
+        expect(request.url.queryParameters['scope'], 'user');
         return http.Response(
           jsonEncode([
             {

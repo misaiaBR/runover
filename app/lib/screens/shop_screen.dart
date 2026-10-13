@@ -122,7 +122,12 @@ class _ShopScreenState extends State<ShopScreen> {
 
   Future<_ShopData> _load(ApiClient api) async {
     final results = await Future.wait([
-      api.getShopCatalog(),
+      // O Mercado é a loja pessoal: o servidor conhece três escopos (pessoal,
+      // equipe e Passe), e cada loja se mostra sozinha. Pedir o catálogo
+      // inteiro encheria a vitrine de itens que a compra recusa — emblema e
+      // faixa da equipe não têm nada a ver aqui, e o item do Passe só sai da
+      // trilha. A Loja da equipe já pede o escopo dela.
+      api.getShopCatalog(scope: 'user'),
       api.getInventory(),
       api.getWallet(),
     ]);
@@ -519,14 +524,18 @@ class _EarnRates {
 }
 
 /// "Inclui: A, B e C" para pacotes; null nas demais categorias.
+///
+/// Só entram no texto os itens que o catálogo da loja pessoal conhece. Um
+/// `grants` que não resolve (id de outra loja, item fora de catálogo) fica de
+/// fora em vez de mostrar o identificador cru: id interno não aparece na
+/// interface, e um pacote que não inclui nada visível não ganha linha nenhuma.
 String? _bundleSubtitle(ShopItem item, List<ShopItem> catalog) {
   if (item.category != 'bundle') return null;
   final grants = (item.payload['grants'] as List? ?? const []).map((e) => '$e');
   final names = [
     for (final id in grants)
-      catalog.where((c) => c.id == id).map((c) => c.name).firstOrNull ??
-          id,
-  ];
+      catalog.where((c) => c.id == id).map((c) => c.name).firstOrNull,
+  ].nonNulls.toList();
   if (names.isEmpty) return null;
   return 'Inclui: ${names.join(', ')}';
 }

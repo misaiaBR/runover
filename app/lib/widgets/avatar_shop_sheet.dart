@@ -45,7 +45,11 @@ class _AvatarShopSheetState extends State<AvatarShopSheet> {
 
   Future<_AvatarShopData> _load() async {
     final results = await Future.wait([
-      widget.api.getShopCatalog(),
+      // Galeria pessoal: o servidor conhece os três escopos, e aqui só interessam
+      // os avatares da loja do jogador. Emblema da equipe e item do Passe aparecem
+      // na lista, mas a compra recusa — a vitrine não pode oferecer o que a
+      // carteira não libera.
+      widget.api.getShopCatalog(scope: 'user'),
       widget.api.getInventory(),
       widget.api.getWalletBalance(),
     ]);
