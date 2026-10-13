@@ -82,6 +82,10 @@ class _TrackingScreenState extends State<TrackingScreen>
   final Set<String> _contested = {};
   List<TerritoryDetail>? _nearbyMarks;
   bool _loadingMarks = false;
+
+  /// O toque em "Desafiar este território" não pegou: havia corrida em
+  /// andamento neste aparelho, e o alvo não foi aplicado a ela.
+  bool _challengeDeclined = false;
   final _mapController = MapController();
   bool _mapReady = false;
   final _name = TextEditingController();
@@ -118,6 +122,17 @@ class _TrackingScreenState extends State<TrackingScreen>
       }
       if (!restored) {
         _draft!.targetTerritoryId = widget.challengeTarget?.id;
+      } else if (widget.challengeTarget != null && _draft!.track.isEmpty) {
+        // Rascunho sem nenhum ponto é o mesmo que corrida nova: o alvo escolhido
+        // no mapa vale.
+        _draft!
+          ..targetTerritoryId = widget.challengeTarget!.id
+          ..conquer = true;
+      } else if (widget.challengeTarget != null) {
+        // Trajeto em andamento não adota alvo: a pessoa estaria declarando
+        // desafio contra um território que não percorreu. A tela avisa em vez de
+        // deixar o toque sem consequência.
+        _challengeDeclined = true;
       }
       _name.text = _draft!.name;
       if (restored) await _store!.save(_draft!);
@@ -133,7 +148,11 @@ class _TrackingScreenState extends State<TrackingScreen>
         });
       }
       setState(() {
-        _message = restored
+        _message = _challengeDeclined
+            ? 'Você tem uma corrida em andamento neste aparelho: o desafio '
+                  'escolhido não foi aplicado a ela. Salve o percurso antes de '
+                  'desafiar.'
+            : restored
             ? 'Corrida recuperada. Continue ou salve o percurso já registrado.'
             : 'Toque em Iniciar para registrar seu percurso.';
       });
@@ -338,7 +357,11 @@ class _TrackingScreenState extends State<TrackingScreen>
       // O alvo declarado do desafio tem de aparecer na corrida: é ele que o
       // servidor cobra, e fechar o laço em outro lugar não toma território.
       final challenged = widget.challengeTarget;
-      if (challenged == null) return null;
+      // O aviso fala do desafio que a corrida realmente carrega, não do toque
+      // que a pessoa fez: com trajeto em andamento o alvo não foi aplicado.
+      if (challenged == null || _draft?.targetTerritoryId != challenged.id) {
+        return null;
+      }
       return 'Desafio declarado: ${challenged.name}. Feche o laço passando por '
           'dentro dele — fora do território escolhido a conquista não vale.';
     }
