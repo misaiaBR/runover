@@ -316,4 +316,31 @@ void main() {
     expect(find.textContaining('modo demonstração'), findsNothing);
     api.close();
   });
+
+  test('o alvo declarado do desafio viaja com a corrida', () {
+    final draft = RunDraft(
+      id: 'draft-alvo',
+      track: const [],
+      conquer: true,
+      challenge: 'distance',
+      targetTerritoryId: 'territorio-9',
+    );
+    expect(draft.payload['target_territory_id'], 'territorio-9');
+    final restored = RunDraft.fromJson(
+      jsonDecode(jsonEncode(draft.toJson())) as Map<String, dynamic>,
+    );
+    expect(restored.targetTerritoryId, 'territorio-9');
+    expect(restored.challenge, 'distance');
+    // Sem alvo (laço livre, caçada), o campo vai nulo: o servidor decide pela
+    // sobreposição, como sempre decidiu.
+    expect(RunDraft(id: 'draft-sem-alvo', track: const []).payload.containsKey(
+      'target_territory_id',
+    ), isTrue);
+    expect(
+      RunDraft(id: 'draft-sem-alvo-2', track: const []).payload[
+        'target_territory_id'
+      ],
+      isNull,
+    );
+  });
 }

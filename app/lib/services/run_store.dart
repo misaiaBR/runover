@@ -14,6 +14,10 @@ class RunDraft {
   bool conquer;
   String? challenge; // "pace" | "distance" — desafio de conquista
   String? teamId;
+  /// Território escolhido no mapa para o desafio ("Desafiar dono"). Enviado como
+  /// `target_territory_id`: sem ele, quem fecha o laço na divisa de dois
+  /// territórios desafia o que a sobreposição escolher.
+  String? targetTerritoryId;
   /// Pausas com motivo: manual, gps, app, limite.
   final List<Map<String, String>> pauses;
   RunDraft({
@@ -25,6 +29,7 @@ class RunDraft {
     this.conquer = false,
     this.challenge,
     this.teamId,
+    this.targetTerritoryId,
     List<Map<String, String>>? pauses,
   }) : pauses = pauses ?? [];
 
@@ -62,6 +67,7 @@ class RunDraft {
     conquer: j['conquer'] ?? false,
     challenge: j['challenge'],
     teamId: j['team_id'],
+    targetTerritoryId: j['target_territory_id'],
     pauses:
         (j['pauses'] as List?)
             ?.map((p) => Map<String, String>.from(p as Map))
@@ -75,6 +81,7 @@ class RunDraft {
     'conquer': conquer,
     'challenge': conquer ? (challenge ?? 'pace') : challenge,
     'team_id': teamId,
+    'target_territory_id': targetTerritoryId,
   };
   Map<String, dynamic> toJson() => {
     ...payload,

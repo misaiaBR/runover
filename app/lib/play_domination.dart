@@ -2,8 +2,9 @@
 ///
 /// É o toque do botão JOGAR da home e o "Dominação" do estado vazio de
 /// Corridas: um caminho só, para as duas telas não abrirem o jogo de jeitos
-/// diferentes. Laço livre vai direto para o tracking; caçar selvagem e desafiar
-/// dono passam pelo mapa já focado na mecânica (dica + camadas).
+/// diferentes. Laço livre vai direto para o tracking, já com a conquista ligada
+/// (a folha promete um território); caçar selvagem e desafiar dono passam pelo
+/// mapa já focado na mecânica (dica + camadas).
 library;
 
 import 'package:flutter/material.dart';
@@ -18,9 +19,11 @@ Future<void> playDomination(BuildContext context) {
     onSelect: (mode) {
       switch (mode) {
         case PlayMode.freeLoop:
-          Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const TrackingScreen()));
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => const TrackingScreen(mode: PlayMode.freeLoop),
+            ),
+          );
         case PlayMode.huntWild:
         case PlayMode.challenge:
           Navigator.of(context).push(

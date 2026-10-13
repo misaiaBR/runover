@@ -14,6 +14,12 @@ enum PlayMode {
   challenge,
 }
 
+/// Escolher uma das três mecânicas — ou um alvo no mapa — é intenção de
+/// conquistar. A corrida aberta por qualquer um desses caminhos começa com o
+/// alternador ligado; desligar continua sendo opção de quem corre.
+bool conquestIntended({PlayMode? mode, Object? target, Object? challengeTarget}) =>
+    mode != null || target != null || challengeTarget != null;
+
 /// Abre o "Como quer jogar?" e devolve a mecânica escolhida via [onSelect].
 Future<void> showPlayModeSheet(
   BuildContext context, {

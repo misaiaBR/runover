@@ -547,6 +547,10 @@ class ClaimRequest(BaseModel):
     # Desafio de retomada: "pace" (ritmo) ou "distance" (distância),
     # escolhido antes de correr. Obrigatório só contra território com marca.
     challenge: str | None = None
+    # Território que o corredor escolheu desafiar, quando escolheu um. Sem ele,
+    # quem fecha um laço sobre a divisa de dois territórios desafia o que a
+    # sobreposição escolher — não o que a pessoa mirou.
+    target_territory_id: str | None = Field(default=None, max_length=80)
 
     @field_validator("challenge")
     @classmethod

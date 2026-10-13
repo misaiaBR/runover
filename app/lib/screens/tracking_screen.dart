@@ -14,6 +14,7 @@ import '../services/api_client.dart';
 import '../services/position_refiner.dart';
 import '../services/territory_loop.dart';
 import '../state/app_state.dart';
+import '../widgets/play_mode_sheet.dart';
 import '../widgets/runover_ui.dart';
 import '../widgets/territory_style.dart';
 import 'run_detail_screen.dart';
@@ -46,7 +47,21 @@ class TrackingScreen extends StatefulWidget {
 
   /// Território selvagem escolhido no mapa: vira o alvo visível da corrida.
   final WildSpawn? target;
-  const TrackingScreen({super.key, this.draftId, this.target});
+
+  /// Mecânica escolhida no "Como quer jogar?". As três são conquista, então
+  /// escolher uma delas liga o alternador — a folha promete um território.
+  final PlayMode? mode;
+
+  /// Território dominado escolhido em "Desafiar dono": vai ao servidor como
+  /// alvo declarado, que só aceita o desafio se o laço passar por dentro dele.
+  final Territory? challengeTarget;
+  const TrackingScreen({
+    super.key,
+    this.draftId,
+    this.target,
+    this.mode,
+    this.challengeTarget,
+  });
   @override
   State<TrackingScreen> createState() => _TrackingScreenState();
 }
@@ -90,9 +105,20 @@ class _TrackingScreenState extends State<TrackingScreen>
       );
       final restored = matches.isNotEmpty;
       _draft = restored ? matches.first : RunDraft.create();
-      // Quem veio do mapa atrás de um território selvagem já escolheu a
-      // conquista; o alternador na tela continua podendo desfazer.
-      if (!restored && widget.target != null) _draft!.conquer = true;
+      // As três mecânicas do "Como quer jogar?" são conquista: escolhido "Laço
+      // livre", o alternador começa ligado (e continua podendo desfazer). Sem
+      // isso a folha promete um território que a corrida nem tenta fechar.
+      if (!restored &&
+          conquestIntended(
+            mode: widget.mode,
+            target: widget.target,
+            challengeTarget: widget.challengeTarget,
+          )) {
+        _draft!.conquer = true;
+      }
+      if (!restored) {
+        _draft!.targetTerritoryId = widget.challengeTarget?.id;
+      }
       _name.text = _draft!.name;
       if (restored) await _store!.save(_draft!);
       if (!mounted) return;
@@ -308,7 +334,14 @@ class _TrackingScreenState extends State<TrackingScreen>
   /// partir do último ponto. Sem alvo não há nada a dizer.
   String? _targetHint(List<Map<String, dynamic>> track) {
     final target = widget.target;
-    if (target == null) return null;
+    if (target == null) {
+      // O alvo declarado do desafio tem de aparecer na corrida: é ele que o
+      // servidor cobra, e fechar o laço em outro lugar não toma território.
+      final challenged = widget.challengeTarget;
+      if (challenged == null) return null;
+      return 'Desafio declarado: ${challenged.name}. Feche o laço passando por '
+          'dentro dele — fora do território escolhido a conquista não vale.';
+    }
     if (track.isEmpty) {
       return 'Rumo ao território selvagem: comece a correr até a área marcada.';
     }

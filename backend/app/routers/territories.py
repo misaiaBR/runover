@@ -41,6 +41,7 @@ from app.services.scoring import (
     total_score,
     total_team_score,
     user_rank_positions,
+    user_team,
 )
 from app.services.spawns import (
     WELCOME_RADIUS_M,
@@ -250,7 +251,9 @@ def get_territory(territory_id: str, db: Session = Depends(get_db), _: User = De
     if not t:
         raise HTTPException(404, "Território não encontrado.")
     owner = _latest_ownership_map(db).get(territory_id)
-    mark = _current_mark(db, territory_id)
+    # Sem dono não há "marca do dono": a ficha de um território livre não pode
+    # exibir (e `apply_claim` não pode exigir) o recorde de quem já saiu do jogo.
+    mark = _current_mark(db, territory_id) if owner else None
     summary = _to_summary(t, owner, _takeover_counts(db, territory_id).get(territory_id, 0))
     previous = (
         db.query(TerritoryOwnership)
@@ -367,6 +370,27 @@ def apply_claim(
 
     created_new = best_match is None or best_ratio < settings.min_overlap_ratio
 
+    if data.target_territory_id is not None:
+        # "Desafiar dono" escolhe um território no mapa: o alvo declarado manda,
+        # desde que o laço cubra de fato o território mirado. Sem isto, fechar o
+        # laço na divisa de dois territórios desafiava o que a sobreposição
+        # escolhesse, e o corredor perdia o desafio que nem sabia que tinha
+        # aceito. Erro de alvo é 400 — a corrida continua sendo salva.
+        target = db.get(Territory, data.target_territory_id)
+        if target is None:
+            raise HTTPException(400, "O território desafiado não existe mais.")
+        if (
+            overlap_ratio(loop_polygon, geojson_to_polygon(target.geojson))
+            < settings.min_overlap_ratio
+        ):
+            raise HTTPException(
+                400,
+                "O laço não fechou sobre o território desafiado — "
+                "corra por cima da área escolhida e tente de novo.",
+            )
+        best_match, best_ratio = target, 1.0
+        created_new = False
+
     # Spawns selvagens cobertos pelo laço (centro dentro do polígono).
     # Vale a lista crua, sem filtro de rua/atividade: o filtro decide o que
     # APARECE no mapa; aqui só importa o que o laço cobriu de fato.
@@ -416,15 +440,24 @@ def apply_claim(
         owners = _latest_ownership_map(db)
         relevance = territory.relevance
         current_owner = owners.get(territory.id)
-        already_mine = current_owner and (
-            (team and current_owner.owner_team_id == team.id)
-            or (not team and current_owner.owner_user_id == current_user.id)
-        )
-        if already_mine:
-            raise HTTPException(400, "Este território já é seu.")  # RN07
+        # RN07 — nem você nem a sua equipe são alvo de vocês mesmos, com o
+        # chapéu que a corrida estiver usando: o `team_id` do pedido diz para quem
+        # vai o território, não quem pode ser desafiado. Tomar a própria posse
+        # (pessoal→equipe ou equipe→pessoal) transferia o território pagando a si
+        # mesmo a penalidade de −30, e somava RR por cima da marca que o próprio
+        # corredor deixou — granja de liga com uma corrida lenta e outra rápida.
+        home_team = user_team(db, current_user.id)
+        if current_owner is not None and (
+            current_owner.owner_user_id == current_user.id
+            or (home_team is not None and current_owner.owner_team_id == home_team.id)
+        ):
+            raise HTTPException(400, "Este território já é seu ou da sua equipe.")
 
         # Desafio de conquista: sem vencer a marca do dono, o território fica.
-        current_mark = _current_mark(db, territory.id)
+        # A marca só defende território com dono: liberada a posse (conta
+        # excluída, equipe dissolvida), o recorde de quem não existe mais não
+        # pode ser exigência contra um território "disponível".
+        current_mark = _current_mark(db, territory.id) if current_owner else None
         if current_mark is not None:
             if data.challenge is None:
                 raise HTTPException(
@@ -590,6 +623,7 @@ def apply_claim(
         challenge_won=None if current_mark is None else True,
         beaten_pace_seconds_per_km=None if current_mark is None else current_mark.pace_seconds_per_km,
         beaten_distance_m=None if current_mark is None else current_mark.distance_m,
+        spawns_captured=len(covered),
     )
     db.add(ClaimReceipt(
         user_id=current_user.id,
