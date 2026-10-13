@@ -404,6 +404,12 @@ def apply_claim(
         current_mark = None
     else:
         territory = best_match
+        # RN09 — a pontuação sai da área do território que muda de mão, e numa
+        # retomada o polígono é o que já existia. Pontuar pelo laço permitiria
+        # multiplicar o ganho passando por cima de um território pequeno com uma
+        # volta olímpica de um quilômetro de lado: o laço mede 100x a área, mas
+        # o que trocou de dono foi o território.
+        area_m2 = polygon_area_m2(geojson_to_polygon(territory.geojson))
         # Lock the matched territory and recompute ownership after acquiring
         # the lock so simultaneous claims cannot both debit the same owner.
         db.execute(select(Territory).where(Territory.id == territory.id).with_for_update())

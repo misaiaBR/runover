@@ -4,13 +4,15 @@ A exclusão de conta e a dissolução de equipe anulam de propósito as colunas 
 dono da posse — o território volta a ficar livre e o histórico fica. A leitura,
 porém, tratava a linha como se sempre tivesse um titular, e a derrota no desafio
 também devolve um `claim` (é o recibo do desafio, com `challenge_won` falso,
-zero pontos e sem troca de posse), que era contado como conquista.
+zero pontos e sem troca de posse), que era contado como conquista. E retomar um
+território pontuava pela área do laço, não pela área que mudou de mão.
 """
 
 import math
 import uuid
 from datetime import datetime, timedelta, timezone
 
+from app.geometry import geojson_to_polygon, polygon_area_m2
 from app.models import (
     CoinTransaction,
     ScoreEvent,
@@ -140,3 +142,35 @@ def test_losing_a_challenge_pays_nothing_and_is_not_a_conquest(client, db_sessio
     assert goal["value"] == 0, progress["goals"]
     first_badge = next(b for b in progress["badges"] if b["name"] == "Primeira conquista")
     assert first_badge["earned"] is False, progress["badges"]
+
+
+def test_retake_scores_the_territory_area_not_the_loop_area(client, db_session):
+    """Quem retoma um território leva os pontos daquele território, não os da
+    volta olímpica que deu por cima dele."""
+    owner = auth_headers(client, username="defensor", email="defensor@example.com")
+    rival = auth_headers(client, username="atacante", email="atacante@example.com")
+    now = BASE
+
+    created = _run(client, owner, track=_square(120, walk_seconds=180, start=now),
+                   name="laço pequeno")
+    territory_id = created["claim"]["territory"]["id"]
+    territory = db_session.get(Territory, territory_id)
+    held_m2 = polygon_area_m2(geojson_to_polygon(territory.geojson))
+
+    giant = _run(
+        client, rival,
+        track=_square(1200, walk_seconds=1200, start=now + timedelta(days=1)),
+        name="laço gigante", challenge="pace",
+    )
+    claim = giant["claim"]
+    assert claim["created_new"] is False, claim
+    assert claim["challenge_won"] is True, claim
+    assert claim["territory"]["id"] == territory_id
+    # O laço gigante tem ~100x a área do território; o que muda de mão é o
+    # território. A pontuação tem de acompanhar isso.
+    assert math.isclose(claim["area_m2"], held_m2, rel_tol=1e-6), (
+        claim["area_m2"], held_m2,
+    )
+    assert claim["points_awarded"] <= created["claim"]["points_awarded"] + 1, (
+        claim["points_awarded"], created["claim"]["points_awarded"],
+    )
