@@ -172,6 +172,18 @@ class _TeamSettingsScreenState extends State<TeamSettingsScreen> {
     }
   }
 
+  /// Voltou da Loja da equipe — pela folha do emblema ou pela rota da loja
+  /// inteira. Quem compra ou equipa por lá muda as duas coisas que esta tela
+  /// mostra, e nenhuma das duas rotas se atualiza sozinha: a prévia do cartão
+  /// (o id equipado e o catálogo que o desenha) e o painel por trás, que guarda
+  /// a equipe com que foi aberta. O `mounted` não é luxo: a folha pode ter
+  /// fechado enquanto a recarga esperava a rede.
+  Future<void> _returnedFromShop() async {
+    await _loadEmblems();
+    if (!mounted) return;
+    widget.onChanged();
+  }
+
   /// Abre a folha da loja da equipe. Membro sem cargo não chega aqui: o botão
   /// só existe para quem o servidor deixa comprar.
   Future<void> _pickEmblem() async {
@@ -182,13 +194,7 @@ class _TeamSettingsScreenState extends State<TeamSettingsScreen> {
       builder: (_) => AvatarShopSheet(
         api: context.read<AppState>().api,
         teamId: widget.team.id,
-        onChanged: () async {
-          // A compra aconteceu: a prévia tem de mostrar o emblema novo na hora,
-          // e o painel por trás também — a rota empurrada guarda a equipe com
-          // que foi aberta, então nada aqui se atualiza sozinho.
-          await _loadEmblems();
-          widget.onChanged();
-        },
+        onChanged: _returnedFromShop,
       ),
     );
   }
@@ -423,7 +429,7 @@ class _TeamSettingsScreenState extends State<TeamSettingsScreen> {
                 MaterialPageRoute(
                   builder: (_) => TeamShopScreen(teamId: team.id),
                 ),
-              ).then((_) => widget.onChanged()),
+              ).then((_) => _returnedFromShop()),
       ),
       ..._entrySections(context),
       if (_isAdmin) ..._inviteSection(context),

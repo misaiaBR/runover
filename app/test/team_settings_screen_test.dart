@@ -156,6 +156,11 @@ Future<TeamSettingsCalls> openTeamSettings(
       if (method == 'GET' && path == '$_teamPath/inventory') {
         return http.Response(jsonEncode(inventory()), 200);
       }
+      if (method == 'GET' && path == _teamPath) {
+        // A Loja da equipe inteira, aberta por cima destes ajustes, pede a
+        // equipe para saber se quem está ali pode comprar e equipar.
+        return http.Response(jsonEncode(teamJson), 200);
+      }
       if (method == 'GET' && path == '$_teamPath/wallet') {
         return http.Response(
           jsonEncode({
