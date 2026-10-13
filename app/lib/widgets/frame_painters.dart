@@ -16,6 +16,7 @@ import 'package:flutter/material.dart';
 
 import '../models.dart';
 import 'cosmetics.dart';
+import 'effect_painters.dart';
 
 /// As famílias conhecidas, nas mesmas palavras do `FRAME_STYLES` do servidor.
 enum FrameFamily {
@@ -481,24 +482,20 @@ class FrameFamilyPainter extends CustomPainter {
 
   void _paintSpeckles(Canvas canvas, Rect box, Color base) {
     // Pedra não é ruído aleatório de tela: a semente é o id do item, então o
-    // mesmo cosmético desenha sempre as mesmas lascas.
-    var state = 0;
-    for (final unit in item.id.codeUnits) {
-      state = ((state * 33) + unit) & 0x7fffffff;
-    }
-    double next() {
-      state = (state * 1103515245 + 12345) & 0x7fffffff;
-      return (state % 1000) / 1000;
-    }
-
+    // Pedra não é ruído aleatório de tela: a semente é a mesma que o palco dos
+    // efeitos usa (o id do item), então o cosmético desenha sempre as mesmas
+    // lascas — na vitrine da loja e no perfil de quem equipou.
+    final rng = math.Random(effectSeedOf(item.id));
     for (var i = 0; i < 40; i++) {
-      final x = box.left + next() * box.width;
-      final y = box.top + next() * box.height;
+      final x = box.left + rng.nextDouble() * box.width;
+      final y = box.top + rng.nextDouble() * box.height;
+      final r = 0.6 + rng.nextDouble() * 1.1;
+      final clara = rng.nextDouble() > 0.5;
       canvas.drawCircle(
         Offset(x, y),
-        0.6 + next() * 1.1,
+        r,
         Paint()
-          ..color = next() > 0.5
+          ..color = clara
               ? Colors.white.withValues(alpha: 0.3)
               : Colors.black.withValues(alpha: 0.35),
       );
