@@ -334,6 +334,7 @@ class _TeamHeader extends StatelessWidget {
               FramedAvatar(
                 radius: 28,
                 image: image,
+                avatarItem: avatarItem,
                 fallbackLetter: team.name.isNotEmpty
                     ? team.name[0].toUpperCase()
                     : '?',

@@ -4,6 +4,7 @@ import '../format.dart';
 import '../models.dart';
 import '../services/api_client.dart';
 import '../services/profile_image_provider.dart';
+import 'avatar_finish.dart';
 import 'cosmetics.dart';
 import 'runover_ui.dart';
 
@@ -324,20 +325,26 @@ class _AvatarShopSheetState extends State<AvatarShopSheet> {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(16),
-                      child: image == null
-                          ? const Center(
-                              child: Icon(Icons.face_outlined, size: 32),
-                            )
-                          : Image(
-                              image: image,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, _, _) => const Icon(
-                                Icons.face_outlined,
-                                size: 32,
+                    AvatarFinishLayer(
+                      // A mesma luz, o mesmo relevo e a mesma trama da vitrine e
+                      // do perfil — aqui recortados no canto arredondado do card.
+                      item: item,
+                      cornerRadius: 16,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: image == null
+                            ? const Center(
+                                child: Icon(Icons.face_outlined, size: 32),
+                              )
+                            : Image(
+                                image: image,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, _, _) => const Icon(
+                                  Icons.face_outlined,
+                                  size: 32,
+                                ),
                               ),
-                            ),
+                      ),
                     ),
                     if (equipped)
                       Positioned(

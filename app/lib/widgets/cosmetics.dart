@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 
 import '../models.dart';
 import '../services/profile_image_provider.dart';
+import 'avatar_finish.dart';
 import 'effect_painters.dart';
 import 'frame_painters.dart';
 import 'runover_ui.dart';
@@ -179,18 +180,23 @@ class _FramedAvatarState extends State<FramedAvatar>
         : colors.length == 1
             ? colors.first
             : null;
-    final avatar = CircleAvatar(
-      radius: widget.radius,
-      backgroundColor: Theme.of(
-        context,
-      ).colorScheme.primary.withValues(alpha: .12),
-      foregroundImage: widget.image,
-      onForegroundImageError: widget.image != null ? (_, _) {} : null,
-      child: Text(
-        widget.fallbackLetter.toUpperCase(),
-        style: TextStyle(
-          fontSize: widget.radius * 0.75,
-          fontWeight: FontWeight.w800,
+    final avatar = AvatarFinishLayer(
+      // O acabamento é do item do rosto, não da moldura — por isso ele vive
+      // aqui, dentro do `avatar`, e aparece com ou sem aro por cima.
+      item: widget.avatarItem,
+      child: CircleAvatar(
+        radius: widget.radius,
+        backgroundColor: Theme.of(
+          context,
+        ).colorScheme.primary.withValues(alpha: .12),
+        foregroundImage: widget.image,
+        onForegroundImageError: widget.image != null ? (_, _) {} : null,
+        child: Text(
+          widget.fallbackLetter.toUpperCase(),
+          style: TextStyle(
+            fontSize: widget.radius * 0.75,
+            fontWeight: FontWeight.w800,
+          ),
         ),
       ),
     );
