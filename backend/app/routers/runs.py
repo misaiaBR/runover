@@ -42,6 +42,17 @@ def digest(data):
     return hashlib.sha256(json.dumps(data, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
+def claim_won(claim) -> bool:
+    """A corrida trocou de dono, de fato?
+
+    O recibo de um desafio perdido também vem em `claim` — é a resposta da
+    retomada, com `challenge_won` falso, pontos zero e sem troca de posse. Contar
+    esse recibo como conquista pagaria o bônus de quem perdeu e enchia a meta
+    semanal e o selo "Primeira conquista" com derrotas.
+    """
+    return bool(claim) and claim.get("challenge_won") is not False
+
+
 def serialize(run, detail=False):
     value = {"id": run.id, "name": run.name, "started_at": run.started_at.replace(tzinfo=timezone.utc).isoformat(),
              "distance_m": run.distance_m, "duration_seconds": run.duration_seconds,
@@ -124,7 +135,7 @@ def create_run(db: Session, user: User, data: RunRequest) -> dict:
     breakdown = earn_for_run(
         db, user,
         distance_m=distance,
-        conquered=result["claim"] is not None,
+        conquered=claim_won(result["claim"]),
         started_at_utc_naive=start,
         utc_offset_minutes=data.utc_offset_minutes,
     )
@@ -167,9 +178,9 @@ def progress(
     weekly = base.with_entities(Run.distance_m, Run.started_at, Run.result_json).filter(Run.started_at >= week, Run.started_at < week_end).all()
     km = sum(distance_m for distance_m, _, _ in weekly) / 1000
     days = len({(started_at + timedelta(minutes=utc_offset_minutes)).date() for _, started_at, _ in weekly})
-    claims = sum(bool(json.loads(result_json).get("claim")) for _, _, result_json in weekly)
+    claims = sum(claim_won(json.loads(result_json).get("claim")) for _, _, result_json in weekly)
     # Personal milestones only; no extra score that could encourage farming.
-    first_claim = any(json.loads(result_json).get("claim") for (result_json,) in base.with_entities(Run.result_json).all())
+    first_claim = any(claim_won(json.loads(result_json).get("claim")) for (result_json,) in base.with_entities(Run.result_json).all())
     goals = [{"name":"Correr 10 km nesta semana", "value":round(km,2), "target":10, "unit":"km"},
              {"name":"Correr em 3 dias nesta semana", "value":days, "target":3, "unit":"dias"},
              {"name":"Conquistar 3 territórios nesta semana", "value":claims, "target":3, "unit":"conquistas"}]
