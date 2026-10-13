@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:runover_app/models.dart';
@@ -43,6 +45,7 @@ Future<void> _pumpField(
   Brightness brightness = Brightness.dark,
   bool onDarkSurface = false,
   Size box = const Size(320, 120),
+  bool reduceMotion = false,
 }) async {
   tester.view.physicalSize = const Size(900, 700);
   tester.view.devicePixelRatio = 1;
@@ -50,14 +53,23 @@ Future<void> _pumpField(
   await tester.pumpWidget(
     MaterialApp(
       theme: buildRunoverTheme(brightness: brightness),
-      home: Scaffold(
-        body: Center(
-          child: SizedBox(
-            width: box.width,
-            height: box.height,
-            child: ProfileEffectOverlay(
-              effect: item,
-              onDarkSurface: onDarkSurface,
+      // O pedido de movimento reduzido chega pela árvore de `MediaQuery`, como
+      // chega no aparelho de quem desligou a animação do sistema.
+      home: Builder(
+        builder: (context) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(disableAnimations: reduceMotion),
+          child: Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: box.width,
+                height: box.height,
+                child: ProfileEffectOverlay(
+                  effect: item,
+                  onDarkSurface: onDarkSurface,
+                ),
+              ),
             ),
           ),
         ),
@@ -76,6 +88,49 @@ StageEffectPainter _painter(WidgetTester tester) {
         .first,
   );
   return paint.painter! as StageEffectPainter;
+}
+
+/// Brilho médio de um quadro do efeito, desenhado fora da tela. É a forma de
+/// contar flash por segundo sem depender do relógio do teste.
+Future<double> _brilho(EffectSpec spec, double progress) async {
+  final recorder = ui.PictureRecorder();
+  StageEffectPainter(
+    spec: spec,
+    progress: progress,
+    accent: spec.tint(),
+    neutral: Colors.white,
+  ).paint(Canvas(recorder), const Size(120, 60));
+  final image = await recorder.endRecording().toImage(120, 60);
+  final bytes = (await image.toByteData(format: ui.ImageByteFormat.rawRgba))!;
+  image.dispose();
+  var total = 0;
+  for (var i = 0; i < bytes.lengthInBytes; i += 4) {
+    total += bytes.getUint8(i) + bytes.getUint8(i + 1) + bytes.getUint8(i + 2);
+  }
+  return total / (120 * 60 * 3);
+}
+
+/// Quantos clarões o item acende em [segundos]: cada curva que sobe acima do
+/// meio tom entre duas amostras é um flash.
+Future<int> _flashes(
+  ShopItem item, {
+  double seconds = 1,
+  int amostras = 240,
+}) async {
+  final spec = EffectSpec.from(item);
+  final ciclo = spec.cycleMs / 1000;
+  final curva = <double>[];
+  for (var i = 0; i < amostras; i++) {
+    curva.add(await _brilho(spec, (seconds * i / amostras / ciclo) % 1));
+  }
+  final maior = curva.reduce((a, b) => a > b ? a : b);
+  final menor = curva.reduce((a, b) => a < b ? a : b);
+  final corte = menor + (maior - menor) * .5;
+  var beiradas = 0;
+  for (var i = 1; i < curva.length; i++) {
+    if (curva[i - 1] < corte && curva[i] >= corte) beiradas++;
+  }
+  return beiradas;
 }
 
 void main() {
@@ -102,6 +157,74 @@ void main() {
     );
     expect(spec.density, 46);
     expect(spec.cycleMs, 600);
+  });
+
+  test('o estroboscópio cabe no teto de flashes por segundo', () {
+    // Pior caso do vocabulário: `density` no teto com o ciclo no piso. O item
+    // pediria 46 clarões em 600 ms; o relógio entrega só os que a taxa segura
+    // permite — piscar mais que isso é gatilho, não cosmético.
+    final pior = EffectSpec.from(
+      _effect(id: 'e_pior', kind: 'strobe', density: 46, cycleMs: 600),
+    );
+    expect(pior.strobeFlashes, 1);
+    // Um item normal da loja continua piscando o que pode: o teto segura a taxa,
+    // não apaga o efeito comprado.
+    final comum = EffectSpec.from(
+      _effect(id: 'e_comum', kind: 'strobe', density: 6, cycleMs: 1400),
+    );
+    expect(comum.strobeFlashes, 4);
+    expect(
+      comum.strobeFlashes / (comum.cycleMs / 1000),
+      lessThanOrEqualTo(kMaxFlashesPerSecond.toDouble()),
+    );
+  });
+
+  testWidgets('o palco desenhado não passa de três clarões por segundo', (
+    tester,
+  ) async {
+    // A regra mora no `EffectSpec`, mas o que a pessoa vê é o pintor: contado no
+    // desenho de verdade, quadro a quadro, nenhum item do vocabulário pode
+    // estourar a taxa.
+    late int pior;
+    late int comum;
+    await tester.runAsync(() async {
+      pior = await _flashes(
+        _effect(id: 'e_pior', kind: 'strobe', density: 46, cycleMs: 600),
+      );
+      comum = await _flashes(
+        _effect(id: 'e_comum', kind: 'strobe', density: 6, cycleMs: 1400),
+      );
+    });
+    expect(
+      pior,
+      greaterThan(0),
+      reason: 'estroboscópio que não pisca deixou de ser o produto',
+    );
+    expect(pior, lessThanOrEqualTo(kMaxFlashesPerSecond));
+    expect(comum, lessThanOrEqualTo(kMaxFlashesPerSecond));
+  });
+
+  testWidgets('movimento reduzido apaga o relógio do palco', (tester) async {
+    final item = _effect(
+      id: 'e_comum',
+      kind: 'strobe',
+      density: 6,
+      cycleMs: 1400,
+    );
+    await _pumpField(tester, item);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(
+      tester.hasRunningAnimations,
+      isTrue,
+      reason: 'sem o pedido do aparelho o palco anima',
+    );
+    // Quem desligou a animação do sistema muda de ideia no meio da sessão: o
+    // relógio tem de apagar sem reabrir a tela.
+    await _pumpField(tester, item, reduceMotion: true);
+    await tester.pump(const Duration(milliseconds: 900));
+    expect(tester.hasRunningAnimations, isFalse);
+    expect(_painter(tester).progress, 0);
+    expect(tester.takeException(), isNull);
   });
 
   test('itens diferentes desenham campos diferentes', () {
