@@ -438,7 +438,14 @@ def apply_claim(
         # the lock so simultaneous claims cannot both debit the same owner.
         db.execute(select(Territory).where(Territory.id == territory.id).with_for_update())
         owners = _latest_ownership_map(db)
-        relevance = territory.relevance
+        # RN09 — o bônus selvagem vale nos dois caminhos: cobrir um spawn vivo
+        # herda a raridade dele também quando o que muda de mão é um território
+        # que já existia. A relevância fica registrada no território, para que o
+        # desafio seguinte e a penalidade de quem o perca meçam o mesmo número.
+        relevance = max(
+            [territory.relevance] + [s["relevance"] for s in covered]
+        )
+        territory.relevance = relevance
         current_owner = owners.get(territory.id)
         # RN07 — nem você nem a sua equipe são alvo de vocês mesmos, com o
         # chapéu que a corrida estiver usando: o `team_id` do pedido diz para quem

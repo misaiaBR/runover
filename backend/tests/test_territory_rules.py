@@ -9,7 +9,9 @@ o ranking fala.
 * marca de dono só defende território com dono — liberada a posse, o recorde de
   quem saiu do jogo não pode ser exigência contra um "disponível";
 * alvo declarado no mapa é o território desafiado — sem ele, fechar o laço na
-  divisa de dois territórios desafiava o que a sobreposição escolhesse.
+  divisa de dois territórios desafiava o que a sobreposição escolhesse;
+* caçar um spawn sobre território alheio herda a raridade dele, e o recibo conta
+  quantos spawns o laço fechou.
 """
 
 import math
@@ -19,6 +21,7 @@ from app.geometry import polygon_to_geojson
 from app.models import (
     ConquestMark,
     ScoreEvent,
+    SpawnClaim,
     Territory,
     TerritoryOwnership,
     User,
@@ -211,3 +214,41 @@ def test_declared_target_outside_the_loop_saves_the_run_without_the_claim(
     assert result["claim"] is None, result["claim"]
     assert "não fechou sobre o território desafiado" in result["claim_error"]
     assert result["distance_m"] > 0, result
+
+
+def test_wild_spawn_covered_on_a_retake_lifts_the_territory(
+    client, db_session, monkeypatch
+):
+    """Caçar um spawn em cima de território alheio herda a raridade e aparece."""
+    from app.routers import territories as routes
+
+    holder = auth_headers(client, username="titular", email="titular@example.com")
+    hunter = auth_headers(client, username="cacador", email="cacador@example.com")
+    held = submit_run(
+        client, holder, track=square_track(120, walk_seconds=180, start=BASE),
+        name="território com spawn",
+    )
+    territory_id = held["claim"]["territory"]["id"]
+
+    spawn = {
+        "key": "grid-spawn-1",
+        "lat": LAT + 0.0002,
+        "lng": LNG + 0.0002,
+        "radius_m": 80,
+        "relevance": 9,
+        "rarity": "épico",
+    }
+    monkeypatch.setattr(routes, "wild_spawns_in_bounds", lambda *a, **k: [spawn])
+
+    taken = submit_run(
+        client, hunter,
+        track=square_track(120, walk_seconds=120, start=BASE + timedelta(days=1)),
+        name="caçada em cima", challenge="pace",
+    )
+    claim = taken["claim"]
+    assert claim["created_new"] is False, claim
+    assert claim["spawns_captured"] == 1, claim
+    assert claim["territory"]["id"] == territory_id
+    db_session.expire_all()
+    assert db_session.get(Territory, territory_id).relevance == 9
+    assert db_session.query(SpawnClaim).filter_by(spawn_key="grid-spawn-1").count() == 1
