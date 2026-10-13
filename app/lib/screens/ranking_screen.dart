@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../format.dart';
 import '../models.dart';
 import '../state/app_state.dart';
+import '../widgets/banner_plate.dart';
 import '../widgets/centered_content.dart';
 import '../widgets/cosmetics.dart';
 import '../widgets/league_emblem.dart';
@@ -464,6 +465,10 @@ class _RankingScreenState extends State<RankingScreen> {
     final isMe = _isMine(entry, username, teamName);
     final accent = isMe ? _orange : _border;
     final banner = findItem(_catalog, entry.equippedBanner);
+    // A faixa veste o cartão inteiro: o gradiente do catálogo e, quando o item
+    // declara `plate`, a placa desenhada sobre ele. Sem faixa, o cartão
+    // continua a cor de sempre da lista e `onBanner` é o que diz que o fundo
+    // atrás do nome é escuro nos dois temas.
     final gradient = bannerGradient(banner);
     final onBanner = gradient != null;
     final rankColor = onBanner
@@ -475,108 +480,111 @@ class _RankingScreenState extends State<RankingScreen> {
         color: gradient == null
             ? (isMe ? _scheme.primaryContainer : _panel)
             : null,
-        gradient: gradient,
         border: Border.all(color: accent, width: isMe ? 1.5 : 1),
         borderRadius: BorderRadius.circular(18),
       ),
-      child: InkWell(
-        onTap: entry.ownerType == 'user' ? () => _openProfile(entry) : null,
+      child: BannerPlate(
+        banner: banner,
         borderRadius: BorderRadius.circular(18),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 32,
-                child: Text(
-                  '$rank',
-                  style: TextStyle(
-                    color: rankColor,
-                    fontSize: 20,
+        child: InkWell(
+          onTap: entry.ownerType == 'user' ? () => _openProfile(entry) : null,
+          borderRadius: BorderRadius.circular(18),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 32,
+                  child: Text(
+                    '$rank',
+                    style: TextStyle(
+                      color: rankColor,
+                      fontSize: 20,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              _avatar(
-                entry,
-                radius: 26,
-                accent: isMe ? _orange : null,
-                isMe: isMe,
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Wrap(
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      spacing: 8,
-                      children: [
-                        Text(
-                          _entryName(entry),
-                          style: _rankedName(
-                            entry,
-                            TextStyle(
-                              color: _scheme.onSurface,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
+                const SizedBox(width: 10),
+                _avatar(
+                  entry,
+                  radius: 26,
+                  accent: isMe ? _orange : null,
+                  isMe: isMe,
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 8,
+                        children: [
+                          Text(
+                            _entryName(entry),
+                            style: _rankedName(
+                              entry,
+                              TextStyle(
+                                color: _scheme.onSurface,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              onBanner: onBanner,
                             ),
-                            onBanner: onBanner,
                           ),
-                        ),
-                        if (isMe)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              color: _orange,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            // Tinta do enchimento sólido: o branco fixo do
-                            // mockup não é a tinta de maior contraste sobre o
-                            // laranja.
-                            child: Text(
-                              'Você',
-                              style: TextStyle(
-                                color: inkOnAccent(_orange),
-                                fontSize: 13,
+                          if (isMe)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _orange,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              // Tinta do enchimento sólido: o branco fixo do
+                              // mockup não é a tinta de maior contraste sobre o
+                              // laranja.
+                              child: Text(
+                                'Você',
+                                style: TextStyle(
+                                  color: inkOnAccent(_orange),
+                                  fontSize: 13,
+                                ),
                               ),
                             ),
-                          ),
+                        ],
+                      ),
+                      // Liga de quem está na lista — emblema e rótulo, sem o RR
+                      // do rival. Linha própria: ao lado do nome do adversário o
+                      // card é estreito demais. Equipe não tem liga.
+                      if (entry.league != null) ...[
+                        const SizedBox(height: 4),
+                        LeagueBadgeChip(
+                          badge: entry.league!,
+                          onBanner: onBanner,
+                        ),
                       ],
-                    ),
-                    // Liga de quem está na lista — emblema e rótulo, sem o RR
-                    // do rival. Linha própria: ao lado do nome do adversário o
-                    // card é estreito demais. Equipe não tem liga.
-                    if (entry.league != null) ...[
-                      const SizedBox(height: 4),
-                      LeagueBadgeChip(
-                        badge: entry.league!,
-                        onBanner: onBanner,
+                      Text(
+                        '${entry.territoriesCount} territórios',
+                        style: TextStyle(
+                          color: onBanner ? Colors.white70 : _muted,
+                          fontSize: 15,
+                        ),
                       ),
                     ],
-                    Text(
-                      '${entry.territoriesCount} territórios',
-                      style: TextStyle(
-                        color: onBanner ? Colors.white70 : _muted,
-                        fontSize: 15,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                '${formatPoints(entry.totalScore)} pts',
-                style: TextStyle(
-                  color: onBanner ? Colors.white : _scheme.onSurface,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w500,
+                const SizedBox(width: 12),
+                Text(
+                  '${formatPoints(entry.totalScore)} pts',
+                  style: TextStyle(
+                    color: onBanner ? Colors.white : _scheme.onSurface,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

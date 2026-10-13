@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models.dart';
 import '../services/api_client.dart';
 import '../state/app_state.dart';
+import '../widgets/banner_plate.dart';
 import '../widgets/centered_content.dart';
 import '../widgets/cosmetics.dart';
 import '../widgets/emoticon_pieces.dart';
@@ -89,7 +90,6 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
               // soltos, e o catálogo diz que pacote apresenta cada um.
               final mural = emoticonMural(catalog, p.equippedEmoticons);
               final badge = emoticonBadgeFor(mural.badgePack);
-              final gradient = bannerGradient(banner);
               final scheme = Theme.of(context).colorScheme;
               return CenteredContent(
                 child: SingleChildScrollView(
@@ -119,14 +119,12 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                                     Stack(
                                       clipBehavior: Clip.none,
                                       children: [
-                                        Container(
+                                        SizedBox(
                                           height: 110,
-                                          decoration: BoxDecoration(
-                                            gradient: gradient,
-                                            color: gradient == null
-                                                ? scheme
-                                                      .surfaceContainerHighest
-                                                : null,
+                                          child: BannerPlate(
+                                            banner: banner,
+                                            fallbackColor: scheme
+                                                .surfaceContainerHighest,
                                           ),
                                         ),
                                         Positioned(

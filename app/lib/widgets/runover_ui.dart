@@ -10,6 +10,8 @@
 /// (`SeasonPassScreen`, `RunsScreen`) ou do [Pal] do tema.
 library;
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
@@ -193,6 +195,36 @@ Color legibleInk(Color accent, BuildContext context) {
     ink = Color.lerp(ink, toward, 0.15)!;
   }
   return ink;
+}
+
+// ============================================================ Formas
+
+/// O contorno de um hexágono — a forma do território em todo o jogo (base da
+/// equipe, mapa da placa, emblema da liga, insígnia).
+///
+/// [startAngle] é o ângulo do primeiro vértice: `-π/2` dá a ponta para cima
+/// (o hexágono dos mapas), `0` dá a ponta para a direita (a trama de carbono do
+/// avatar). Passar isso em vez de manter cinco cópias do laço é o que permite
+/// comparar um hexágono com o outro sem reescrever trigonometria.
+Path hexagonPath(
+  Offset center,
+  double radius, {
+  double startAngle = -math.pi / 2,
+}) {
+  final path = Path();
+  for (var i = 0; i < 6; i++) {
+    final angle = startAngle + i * math.pi / 3;
+    final point = Offset(
+      center.dx + radius * math.cos(angle),
+      center.dy + radius * math.sin(angle),
+    );
+    if (i == 0) {
+      path.moveTo(point.dx, point.dy);
+    } else {
+      path.lineTo(point.dx, point.dy);
+    }
+  }
+  return path..close();
 }
 
 // ============================================================ Gradientes

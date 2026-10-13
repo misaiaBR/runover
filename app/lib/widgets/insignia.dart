@@ -119,7 +119,7 @@ class _HexagonPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final hexagon = _hexagon(size.center(Offset.zero), size.width / 2 * .92);
+    final hexagon = hexagonPath(size.center(Offset.zero), size.width / 2 * .92);
     canvas.drawPath(
       hexagon,
       Paint()..color = color.withValues(alpha: filled ? .92 : .10),
@@ -132,24 +132,6 @@ class _HexagonPainter extends CustomPainter {
         ..strokeWidth = size.width * .05
         ..strokeJoin = StrokeJoin.round,
     );
-  }
-
-  Path _hexagon(Offset center, double radius) {
-    final path = Path();
-    for (var i = 0; i < 6; i++) {
-      final angle = math.pi / 180 * (60 * i - 90);
-      final point = Offset(
-        center.dx + radius * math.cos(angle),
-        center.dy + radius * math.sin(angle),
-      );
-      if (i == 0) {
-        path.moveTo(point.dx, point.dy);
-      } else {
-        path.lineTo(point.dx, point.dy);
-      }
-    }
-    path.close();
-    return path;
   }
 
   @override

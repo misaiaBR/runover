@@ -10,6 +10,7 @@ import 'package:runover_app/screens/ranking_screen.dart';
 import 'package:runover_app/services/api_client.dart';
 import 'package:runover_app/state/app_state.dart';
 import 'package:runover_app/theme.dart';
+import 'package:runover_app/widgets/banner_plate.dart';
 import 'package:runover_app/widgets/cosmetics.dart';
 import 'package:runover_app/widgets/league_emblem.dart';
 import 'package:runover_app/widgets/runover_ui.dart';
@@ -235,15 +236,15 @@ void main() {
       find.byType(FramedAvatar),
     );
     expect(framed.any((f) => f.frame?.id == 'frame_bronze'), isTrue);
-    // Card com o fundo da faixa equipada.
+    // Card vestido pela faixa equipada: quem pinta o fundo agora é a
+    // `BannerPlate` do item — o gradiente continua lá (é a base da placa), mas
+    // procurar um `Container` com `gradient` não é mais o sinal de que a faixa
+    // chegou ao cartão.
     expect(
       find.byWidgetPredicate(
-        (w) =>
-            w is Container &&
-            w.decoration is BoxDecoration &&
-            (w.decoration as BoxDecoration).gradient != null,
+        (w) => w is BannerPlate && w.banner?.id == 'banner_oceano',
       ),
-      findsWidgets,
+      findsOneWidget,
     );
     expect(tester.takeException(), isNull);
   });

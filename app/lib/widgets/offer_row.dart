@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../format.dart';
 import '../models.dart';
+import 'banner_plate.dart';
 import 'cosmetics.dart';
 import 'emoticon_pieces.dart';
 import 'runover_ui.dart';
@@ -248,7 +249,6 @@ class ShopPreview extends StatelessWidget {
           width: 120 * scale,
           height: 72 * scale,
           decoration: BoxDecoration(
-            gradient: bannerGradient(item),
             borderRadius: BorderRadius.circular(10),
             boxShadow: [
               BoxShadow(
@@ -257,6 +257,12 @@ class ShopPreview extends StatelessWidget {
                 offset: const Offset(0, 3),
               ),
             ],
+          ),
+          // A vitrine mostra a placa que o item é: só o gradiente deixaria
+          // "faixa de vidro" e "faixa de carbono" com a mesma cara na loja.
+          child: BannerPlate(
+            banner: item,
+            borderRadius: BorderRadius.circular(10),
           ),
         ),
       ),

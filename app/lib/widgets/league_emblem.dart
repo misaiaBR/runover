@@ -127,14 +127,14 @@ class _LeagueEmblemPainter extends CustomPainter {
     if (highlight) {
       // Halo suave + anel branco: marca a divisão atual na escada.
       canvas.drawPath(
-        _hexagon(center, r * 0.98),
+        hexagonPath(center, r * 0.98),
         Paint()
           ..color = color.withValues(alpha: 0.25)
           ..style = PaintingStyle.stroke
           ..strokeWidth = r * 0.28,
       );
       canvas.drawPath(
-        _hexagon(center, r * 0.98),
+        hexagonPath(center, r * 0.98),
         Paint()
           ..color = highlightRing.withValues(alpha: 0.92)
           ..style = PaintingStyle.stroke
@@ -143,7 +143,7 @@ class _LeagueEmblemPainter extends CustomPainter {
     }
 
     canvas.drawPath(
-      _hexagon(center, r * 0.82),
+      hexagonPath(center, r * 0.82),
       Paint()
         ..color = base
         ..style = PaintingStyle.stroke
@@ -151,24 +151,6 @@ class _LeagueEmblemPainter extends CustomPainter {
         ..strokeJoin = StrokeJoin.round,
     );
     _drawShape(canvas, center, r * 0.45, base);
-  }
-
-  Path _hexagon(Offset c, double radius) {
-    final path = Path();
-    for (var i = 0; i < 6; i++) {
-      final angle = math.pi / 180 * (60 * i - 90);
-      final point = Offset(
-        c.dx + radius * math.cos(angle),
-        c.dy + radius * math.sin(angle),
-      );
-      if (i == 0) {
-        path.moveTo(point.dx, point.dy);
-      } else {
-        path.lineTo(point.dx, point.dy);
-      }
-    }
-    path.close();
-    return path;
   }
 
   Path _ngon(Offset c, double radius, int sides, {double startDeg = -90}) {
@@ -230,7 +212,7 @@ class _LeagueEmblemPainter extends CustomPainter {
       case 'pentagon':
         canvas.drawPath(_ngon(c, r, 5), fill);
       case 'hexagon':
-        canvas.drawPath(_hexagon(c, r), stroke);
+        canvas.drawPath(hexagonPath(c, r), stroke);
       case 'octagon':
         canvas.drawPath(_ngon(c, r, 8, startDeg: -67.5), fill);
       case 'gem':

@@ -9,6 +9,7 @@ import '../format.dart';
 import '../services/api_client.dart';
 import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
+import '../widgets/banner_plate.dart';
 import '../widgets/cosmetics.dart';
 import '../widgets/emoticon_pieces.dart';
 import '../widgets/game_nav.dart';
@@ -442,7 +443,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           profile.equippedEmoticons,
         );
         final badge = emoticonBadgeFor(mural.badgePack);
-        final gradient = bannerGradient(banner);
         final displayName = profile.fullName.trim().isEmpty
             ? profile.username
             : profile.fullName;
@@ -480,13 +480,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           child: Stack(
                             clipBehavior: Clip.none,
                             children: [
-                              Container(
+                              SizedBox(
                                 height: 110,
-                                decoration: BoxDecoration(
-                                  gradient: gradient,
-                                  color: gradient == null
-                                      ? scheme.surfaceContainerHighest
-                                      : null,
+                                child: BannerPlate(
+                                  banner: banner,
+                                  fallbackColor: scheme.surfaceContainerHighest,
                                 ),
                               ),
                               Positioned(

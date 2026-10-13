@@ -7,6 +7,7 @@ import '../format.dart';
 import '../models.dart';
 import '../services/api_client.dart';
 import '../state/app_state.dart';
+import '../widgets/banner_plate.dart';
 import '../widgets/centered_content.dart';
 import '../widgets/cosmetics.dart';
 import '../widgets/level_badge.dart';
@@ -322,13 +323,18 @@ class _TeamHeader extends StatelessWidget {
     final image = profileAvatarImage(team.photoUrl, avatarItem);
     return Stack(
       children: [
+        // A faixa é o fundo do cartão: o gradiente do catálogo e, quando o item
+        // declara `plate`, a placa desenhada por cima dele. Fica como camada
+        // abaixo do conteúdo — é decoração, nunca um alvo de toque.
+        Positioned.fill(
+          child: BannerPlate(
+            banner: banner,
+            borderRadius: BorderRadius.circular(16),
+            fallbackColor: colors.surfaceContainer,
+          ),
+        ),
         Container(
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            gradient: gradient,
-            color: gradient == null ? colors.surfaceContainer : null,
-          ),
           child: Row(
             children: [
               FramedAvatar(
