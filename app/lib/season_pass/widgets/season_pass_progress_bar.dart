@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../format.dart';
+import '../../widgets/runover_ui.dart';
 import '../models.dart';
 import '../palette.dart';
 
@@ -10,9 +11,11 @@ import '../palette.dart';
 /// só o trecho do nível atual — é ela que responde "quanto falta para o próximo
 /// cartão acender".
 ///
-/// O fundo é o roxo da trilha: a barra fica do lado das faixas coloridas e
-/// precisa ler igual nelas, no tema claro e no escuro. As fontes de pontos não
-/// moram mais aqui, elas estão no "Como ganhar pontos" do painel de destaque.
+/// A superfície e as tintas vêm do tema: a barra veste o painel do passe (escuro
+/// ou claro) e o trilho vazio usa `Pal.track`, como as outras barras do app. Só
+/// o verde do preenchimento e o dourado do nível são fixos — e o dourado passa
+/// por `legibleInk`, que o queima no tema claro. As fontes de pontos não moram
+/// mais aqui, elas estão no "Como ganhar pontos" do painel de destaque.
 class SeasonPassProgressBar extends StatelessWidget {
   const SeasonPassProgressBar({super.key, required this.season});
 
@@ -20,10 +23,11 @@ class SeasonPassProgressBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pal = Pal.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: trailBoard,
+        color: pal.panel,
         borderRadius: BorderRadius.circular(14),
       ),
       child: Column(
@@ -37,10 +41,10 @@ class SeasonPassProgressBar extends StatelessWidget {
                   alignment: Alignment.centerLeft,
                   child: Text(
                     'Nível ${season.currentLevel}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w900,
-                      color: trailAccent,
+                      color: legibleInk(trailAccent, context),
                     ),
                   ),
                 ),
@@ -52,7 +56,7 @@ class SeasonPassProgressBar extends StatelessWidget {
                   child: LinearProgressIndicator(
                     value: season.levelProgress,
                     minHeight: 12,
-                    backgroundColor: trailNodeIdle,
+                    backgroundColor: pal.track,
                     valueColor: AlwaysStoppedAnimation(trailReached),
                   ),
                 ),
@@ -65,10 +69,10 @@ class SeasonPassProgressBar extends StatelessWidget {
                   child: Text(
                     '${formatPoints(season.points)} / '
                     '${formatPoints(season.pointsForNext)} pts',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12.5,
                       fontWeight: FontWeight.w700,
-                      color: Colors.white,
+                      color: pal.heading,
                     ),
                   ),
                 ),
@@ -81,7 +85,7 @@ class SeasonPassProgressBar extends StatelessWidget {
                 ? 'Faltam ${formatPoints(season.pointsToNextLevel)} pts para o '
                       'nível ${season.currentLevel + 1}'
                 : 'Trilha completa: todos os níveis desta temporada já abriram.',
-            style: const TextStyle(fontSize: 11.5, color: Colors.white70),
+            style: TextStyle(fontSize: 11.5, color: pal.muted),
           ),
         ],
       ),

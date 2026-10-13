@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../palette.dart';
 import '../trail_metrics.dart';
+import '../../widgets/runover_ui.dart';
 
 /// Rótulos das faixas, fixos à esquerda da trilha.
 ///
@@ -61,13 +62,13 @@ class SeasonPassLaneLabels extends StatelessWidget {
 }
 
 /// Continuação do trilho sob a coluna de rótulos: liga a faixa fixa ao primeiro
-/// nó da trilha.
+/// nó da trilha. Usa `Pal.track`, o mesmo trilho das outras barras do app.
 class _Rail extends StatelessWidget {
   const _Rail();
 
   @override
   Widget build(BuildContext context) => SizedBox(
     width: SeasonPassLaneLabels.width,
-    child: Container(height: 4, color: trailNodeIdle),
+    child: Container(height: 4, color: Pal.of(context).track),
   );
 }
