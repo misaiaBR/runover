@@ -525,17 +525,11 @@ class _EarnRates {
 
 /// "Inclui: A, B e C" para pacotes; null nas demais categorias.
 ///
-/// Só entram no texto os itens que o catálogo da loja pessoal conhece. Um
-/// `grants` que não resolve (id de outra loja, item fora de catálogo) fica de
-/// fora em vez de mostrar o identificador cru: id interno não aparece na
-/// interface, e um pacote que não inclui nada visível não ganha linha nenhuma.
+/// A regra de resolução está em [grantNames]: só entram os itens que o catálogo
+/// da loja pessoal conhece, e um pacote sem nada visível não ganha linha.
 String? _bundleSubtitle(ShopItem item, List<ShopItem> catalog) {
   if (item.category != 'bundle') return null;
-  final grants = (item.payload['grants'] as List? ?? const []).map((e) => '$e');
-  final names = [
-    for (final id in grants)
-      catalog.where((c) => c.id == id).map((c) => c.name).firstOrNull,
-  ].nonNulls.toList();
+  final names = grantNames(item, catalog);
   if (names.isEmpty) return null;
   return 'Inclui: ${names.join(', ')}';
 }
@@ -1346,9 +1340,7 @@ class _ItemDetailSheet extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final isBundle = item.category == 'bundle';
     final missing = item.price - balance;
-    final grants = (item.payload['grants'] as List? ?? const [])
-        .map((e) => '$e')
-        .toList();
+    final included = grantNames(item, catalog);
     return SafeArea(
       child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
@@ -1392,7 +1384,7 @@ class _ItemDetailSheet extends StatelessWidget {
               style: TextStyle(
                   fontSize: 14, color: scheme.onSurfaceVariant),
             ),
-            if (grants.isNotEmpty) ...[
+            if (included.isNotEmpty) ...[
               const SizedBox(height: 12),
               const Text(
                 'Inclui',
@@ -1400,7 +1392,7 @@ class _ItemDetailSheet extends StatelessWidget {
                     TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 6),
-              for (final id in grants)
+              for (final name in included)
                 Padding(
                   padding:
                       const EdgeInsets.symmetric(vertical: 3),
@@ -1411,11 +1403,7 @@ class _ItemDetailSheet extends StatelessWidget {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          catalog
-                                  .where((c) => c.id == id)
-                                  .map((c) => c.name)
-                                  .firstOrNull ??
-                              id,
+                          name,
                           style: const TextStyle(fontSize: 14),
                         ),
                       ),
