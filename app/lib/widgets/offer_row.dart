@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../format.dart';
 import '../models.dart';
 import 'cosmetics.dart';
+import 'emoticon_pieces.dart';
 import 'runover_ui.dart';
 
 /// Fileira de oferta: arte em caixa de raridade,
@@ -285,19 +286,35 @@ class ShopPreview extends StatelessWidget {
           ),
         ),
       ),
-      'emoticon' => Breathe(
-        seed: item.id,
-        child: Text(
-          ((item.payload['emoji'] as List?) ?? const ['🎽'])
-              .take(3)
-              .join(' '),
-          style: TextStyle(fontSize: 34 * scale),
-        ),
+      // A prévia é a própria peça do mural: material, gesto e rastro do pacote,
+      // na escala da arte. Um `Text` de emoji não mostrava a diferença entre
+      // "Pacote pulso" e "Pacote mola" antes do toque.
+      'emoticon' => Wrap(
+        alignment: WrapAlignment.center,
+        spacing: 2,
+        runSpacing: 2,
+        children: [
+          for (final glyph in _previewGlyphs(item))
+            EmoticonPiece(
+              glyph: glyph,
+              pack: item,
+              fontSize: 30 * scale,
+              onDarkSurface: onDarkSurface,
+            ),
+        ],
       ),
       'bundle' => BundleCover(item: item, scale: scale),
       _ => const Icon(Icons.style_outlined, size: 40),
     };
   }
+}
+
+/// Os glifos que a prévia do pacote mostra: no máximo três, para a arte
+/// continuar uma caixa e não uma tira. Item sem lista de glifos é anomalia de
+/// catálogo — cai no único emoji que a vitrine sempre usou.
+List<String> _previewGlyphs(ShopItem item) {
+  final glyphs = emoticonGlyphs(item);
+  return (glyphs.isEmpty ? const ['🎽'] : glyphs).take(3).toList();
 }
 
 /// Capa do pacote: as cartas que ele libera, em leque, na cor do `colors` do

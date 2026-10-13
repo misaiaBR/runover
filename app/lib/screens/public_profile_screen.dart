@@ -6,6 +6,7 @@ import '../services/api_client.dart';
 import '../state/app_state.dart';
 import '../widgets/centered_content.dart';
 import '../widgets/cosmetics.dart';
+import '../widgets/emoticon_pieces.dart';
 import '../widgets/league_emblem.dart';
 import '../widgets/level_badge.dart';
 import '../widgets/profile_activity.dart';
@@ -84,6 +85,10 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
               final nameStyle = findItem(catalog, p.equippedNameStyle);
               final banner = findItem(catalog, p.equippedBanner);
               final effect = findItem(catalog, p.equippedEffect);
+              // Mesma resolução do perfil do dono: o servidor devolve glifos
+              // soltos, e o catálogo diz que pacote apresenta cada um.
+              final mural = emoticonMural(catalog, p.equippedEmoticons);
+              final badge = emoticonBadgeFor(mural.badgePack);
               final gradient = bannerGradient(banner);
               final scheme = Theme.of(context).colorScheme;
               return CenteredContent(
@@ -135,23 +140,38 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                                               color: scheme.surface,
                                               shape: BoxShape.circle,
                                             ),
-                                            child: FramedAvatar(
-                                              radius: 40,
-                                              image: profileAvatarImage(
-                                                p.photoUrl,
-                                                avatarItem,
-                                              ),
-                                              fallbackLetter:
-                                                  p.username.isNotEmpty
-                                                  ? p.username[0]
-                                                  : '?',
-                                              frame: frame,
-                                              avatarItem: avatarItem,
-                                              gauges: [
-                                                FrameGauge(
-                                                  GaugeMeasure.xp,
-                                                  p.levelProgress,
+                                            child: Stack(
+                                              clipBehavior: Clip.none,
+                                              children: [
+                                                FramedAvatar(
+                                                  radius: 40,
+                                                  image: profileAvatarImage(
+                                                    p.photoUrl,
+                                                    avatarItem,
+                                                  ),
+                                                  fallbackLetter:
+                                                      p.username.isNotEmpty
+                                                      ? p.username[0]
+                                                      : '?',
+                                                  frame: frame,
+                                                  avatarItem: avatarItem,
+                                                  gauges: [
+                                                    FrameGauge(
+                                                      GaugeMeasure.xp,
+                                                      p.levelProgress,
+                                                    ),
+                                                  ],
                                                 ),
+                                                // O mesmo distintivo que o dono
+                                                // vê no próprio perfil: quem
+                                                // visita vê o pacote equipado,
+                                                // não só o glifo.
+                                                if (badge != null)
+                                                  Positioned(
+                                                    right: 2,
+                                                    bottom: 2,
+                                                    child: badge,
+                                                  ),
                                               ],
                                             ),
                                           ),
@@ -213,14 +233,11 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                                               spacing: 6,
                                               runSpacing: 6,
                                               children: [
-                                                for (final e
-                                                    in p.equippedEmoticons)
-                                                  Text(
-                                                    e,
-                                                    style:
-                                                        const TextStyle(
-                                                          fontSize: 20,
-                                                        ),
+                                                for (final entry
+                                                    in mural.entries)
+                                                  EmoticonPiece(
+                                                    glyph: entry.glyph,
+                                                    pack: entry.pack,
                                                   ),
                                               ],
                                             ),
