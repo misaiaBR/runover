@@ -147,6 +147,12 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                                                   : '?',
                                               frame: frame,
                                               avatarItem: avatarItem,
+                                              gauges: [
+                                                FrameGauge(
+                                                  GaugeMeasure.xp,
+                                                  p.levelProgress,
+                                                ),
+                                              ],
                                             ),
                                           ),
                                         ),

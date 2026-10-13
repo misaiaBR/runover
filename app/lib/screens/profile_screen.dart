@@ -512,6 +512,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                                   : profile.username[0],
                                               frame: frame,
                                               avatarItem: avatarItem,
+                                              // Os números que o perfil tem: o
+                                              // XP até o próximo nível.
+                                              gauges: [
+                                                FrameGauge(
+                                                  GaugeMeasure.xp,
+                                                  profile.levelProgress,
+                                                ),
+                                              ],
                                             ),
                                             // O ponto verde é o sinal vivo que o
                                             // servidor calcula (batimento + GPS),

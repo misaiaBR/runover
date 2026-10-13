@@ -13,8 +13,11 @@ import 'package:flutter/material.dart';
 import '../models.dart';
 import '../services/profile_image_provider.dart';
 import 'effect_painters.dart';
+import 'frame_painters.dart';
 import 'runover_ui.dart';
 
+// Quem veste o avatar com uma moldura de família precisa falar a língua dela.
+export 'frame_painters.dart' show FrameFamily, FrameGauge, GaugeMeasure;
 /// O que a categoria do cosmético entrega no perfil.
 String cosmeticHint(String category) => switch (category) {
   'avatar' => 'Rosto exclusivo do avatar, com acabamento próprio.',
@@ -36,7 +39,11 @@ Color _hex(String hex) {
   return Color(value);
 }
 
-List<Color> _colors(ShopItem item) {
+/// As cores declaradas no payload, na ordem em que o catálogo as pôs.
+///
+/// É o único lugar onde um hex do catálogo vira `Color`: anel da moldura,
+/// gradiente da faixa e tinta do nome saem todos daqui.
+List<Color> cosmeticColors(ShopItem item) {
   final raw = item.payload['colors'] as List? ?? const [];
   if (raw.isEmpty) return const [Color(0xFFFFC93C)];
   return [for (final c in raw) _hex('$c')];
@@ -52,6 +59,10 @@ ShopItem? findItem(List<ShopItem> catalog, String? id) {
 
 /// Moldura ao redor do avatar. Itens `animated` ganham brilho pulsante
 /// em loop (todo o catálogo é animado).
+///
+/// Quando o item declara uma das nove famílias de `style`, o aro é desenhado
+/// pelo pintor daquela família ([FrameFamilyPainter]); sem isso ele continua o
+/// anel simples na cor do payload.
 class FramedAvatar extends StatefulWidget {
   const FramedAvatar({
     super.key,
@@ -60,6 +71,7 @@ class FramedAvatar extends StatefulWidget {
     this.fallbackLetter = '?',
     this.frame,
     this.avatarItem,
+    this.gauges = const [],
   });
 
   final double radius;
@@ -67,6 +79,13 @@ class FramedAvatar extends StatefulWidget {
   final String fallbackLetter;
   final ShopItem? frame;
   final ShopItem? avatarItem;
+
+  /// Os números que o dono do avatar tem, para a moldura de medidor
+  /// (`style: ring`, `gauge: xp|sequencia|territorio`).
+  ///
+  /// Cada um carrega o que mede ([GaugeMeasure]); a moldura usa só o que bate
+  /// com a palavra do payload. Sem número compatível o anel se mostra aberto.
+  final List<FrameGauge> gauges;
 
   @override
   State<FramedAvatar> createState() => _FramedAvatarState();
@@ -91,35 +110,48 @@ class _FramedAvatarState extends State<FramedAvatar>
   /// 1 respira devagar, 4 corre. Sem isto todo item animado teria o mesmo pulso.
   Duration get _pulse => Duration(milliseconds: 1500 - 250 * _tier);
 
+  /// O `style` do item, quando ele declara uma das nove famílias. É o que
+  /// decide se o aro é desenhado pelo pintor da família ou pela cor simples.
+  FrameFamily? get _family => frameFamily(widget.frame);
+
+  Map<String, dynamic> get _payload => widget.frame?.payload ?? const {};
+
+  /// Se o relógio precisa rodar: o catálogo diz que o item é animado, ou a
+  /// família dele tem movimento próprio (o neon gira mesmo em item estático).
+  bool get _moves => _animated || (_family?.loops(_payload) ?? false);
+
+  /// A velocidade vem do servidor quando a família declara a sua (`speed_ms`
+  /// do neon, `interval_ms` da falha); nas demais vale a escada de patamar.
+  Duration get _period => _family?.period(_payload) ?? _pulse;
+
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: _pulse,
-    );
-    if (_animated) _controller.repeat(reverse: true);
+    _controller = AnimationController(vsync: this, duration: _period);
+    _applyClock();
+  }
+
+  /// Acende ou apaga o relógio do anel. Famílias que giram (metal, neon,
+  /// partículas, falha) rodam em avanço contínuo; o anel simples de cor
+  /// continua o pulso de ida e volta que sempre teve.
+  void _applyClock() {
+    if (!_moves) {
+      _controller.stop();
+      return;
+    }
+    // Item trocado na mesma tela: `repeat()` grava o período no instante em
+    // que é chamado, então mexer só na duração deixaria o anel respirando no
+    // ritmo do item anterior. Reiniciar mantém o valor atual e adota o pulso
+    // do patamar novo.
+    _controller
+      ..duration = _period
+      ..repeat(reverse: _family == null);
   }
 
   @override
   void didUpdateWidget(FramedAvatar oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final was = (oldWidget.frame?.payload['animated'] == true) ||
-        (oldWidget.avatarItem?.payload['animated'] == true);
-    if (_animated && !was) {
-      _controller.duration = _pulse;
-      _controller.repeat(reverse: true);
-    } else if (!_animated && was) {
-      _controller.stop();
-    } else if (_animated) {
-      // Item trocado na mesma tela: `repeat()` grava o período no instante em
-      // que é chamado, então mexer só na duração deixaria o anel respirando no
-      // ritmo do item anterior. Reiniciar mantém o valor atual e adota o pulso
-      // do patamar novo.
-      _controller
-        ..duration = _pulse
-        ..repeat(reverse: true);
-    }
+    _applyClock();
   }
 
   @override
@@ -132,7 +164,7 @@ class _FramedAvatarState extends State<FramedAvatar>
   Widget build(BuildContext context) {
     final colors = widget.frame == null
         ? const <Color>[]
-        : _colors(widget.frame!);
+        : cosmeticColors(widget.frame!);
     final borderColor = colors.isEmpty
         ? Colors.transparent
         : colors.length == 1
@@ -154,25 +186,64 @@ class _FramedAvatarState extends State<FramedAvatar>
       ),
     );
     if (colors.isEmpty) return avatar;
-    final ring = Container(
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: borderColor != null
-            ? Border.all(color: borderColor, width: 3)
-            : null,
-        gradient: borderColor == null
-            ? SweepGradient(colors: [...colors, colors.first])
-            : null,
-      ),
-      child: avatar,
+    final family = _family;
+    // Sem família o anel É a cor do item: borda fina ou varredura pelo próprio
+    // Container. Com família o aro nasce do pintor, então do Container sobra
+    // apenas o respiro de 3 px que já existia — o espaço que o perfil reserva
+    // para o avatar não muda de uma família para outra.
+    final ring = family == null
+        ? Container(
+            padding: const EdgeInsets.all(3),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: borderColor != null
+                  ? Border.all(color: borderColor, width: 3)
+                  : null,
+              gradient: borderColor == null
+                  ? SweepGradient(colors: [...colors, colors.first])
+                  : null,
+            ),
+            child: avatar,
+          )
+        : Padding(padding: const EdgeInsets.all(3), child: avatar);
+
+    CustomPaint life(Widget? child, double progress, int tier) => CustomPaint(
+      foregroundPainter: family == null
+          ? RingLifePainter(
+              progress: progress,
+              colors: colors,
+              tier: tier,
+              sparkInk: inkOnAccent(colors.first),
+            )
+          : FrameFamilyPainter(
+              family: family,
+              item: widget.frame!,
+              progress: progress,
+              gauges: widget.gauges,
+            ),
+      child: child,
     );
-    if (!_animated) return ring;
+
+    if (!_moves) {
+      // Item parado: o anel simples não projeta brilho e a família mostra o
+      // desenho dela congelado no instante zero.
+      return family == null ? ring : life(ring, _controller.value, _tier);
+    }
     final tier = _tier;
     return AnimatedBuilder(
       animation: _controller,
       builder: (_, child) {
-        final glow = 0.6 + 0.4 * _controller.value;
+        final progress = _controller.value;
+        // O brilho é a vida visível do patamar. O anel simples vai de 0 a 1 e
+        // volta, então a própria perna serve. Uma família gira em avanço
+        // contínuo (o aro varre, a partícula orbita) e o dente de serra teria
+        // um tranco a cada volta: aí o pulso vem do cosseno, mesmo 0,6..1,0.
+        final glow =
+            0.6 +
+            0.4 *
+                (family == null
+                    ? progress
+                    : 0.5 - 0.5 * math.cos(2 * math.pi * progress));
         return Container(
           decoration: BoxDecoration(
             shape: BoxShape.circle,
@@ -184,15 +255,7 @@ class _FramedAvatarState extends State<FramedAvatar>
               ),
             ],
           ),
-          child: CustomPaint(
-            foregroundPainter: RingLifePainter(
-              progress: _controller.value,
-              colors: colors,
-              tier: tier,
-              sparkInk: inkOnAccent(colors.first),
-            ),
-            child: child,
-          ),
+          child: life(child, progress, tier),
         );
       },
       child: ring,
@@ -325,7 +388,7 @@ class _BreatheState extends State<Breathe>
 /// Faixa do perfil (banner). Devolve `null` quando não há item.
 LinearGradient? bannerGradient(ShopItem? banner) {
   if (banner == null) return null;
-  final colors = _colors(banner);
+  final colors = cosmeticColors(banner);
   return LinearGradient(
     colors: colors.length == 1 ? [colors.first, colors.first] : colors,
     begin: Alignment.topLeft,
@@ -349,7 +412,7 @@ TextStyle styledName(
   bool onBanner = false,
 }) {
   if (style == null) return base;
-  final colors = _colors(style);
+  final colors = cosmeticColors(style);
   final glow = style.payload['glow'] == true;
   final ink = (context == null || onBanner)
       ? colors.first

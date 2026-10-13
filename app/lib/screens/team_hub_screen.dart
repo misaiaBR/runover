@@ -338,6 +338,16 @@ class _TeamHeader extends StatelessWidget {
                     ? team.name[0].toUpperCase()
                     : '?',
                 frame: frame,
+                // Os números que a equipe tem de verdade: a progressão do
+                // nível e as zonas conquistadas sobre a capacidade da base.
+                gauges: [
+                  FrameGauge(GaugeMeasure.xp, team.levelProgress),
+                  if (team.zoneCapacity > 0)
+                    FrameGauge(
+                      GaugeMeasure.territorio,
+                      team.territories.length / team.zoneCapacity,
+                    ),
+                ],
               ),
               const SizedBox(width: 12),
               Expanded(
