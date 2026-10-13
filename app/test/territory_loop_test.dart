@@ -83,9 +83,52 @@ void main() {
       point(0, 0),
       point(step, 0),
       point(step + step, 0, segment: 1), // ~11 m: buraco de GPS
+      point(step + step, step, segment: 1),
+      point(0, step, segment: 1),
       point(0, 0, segment: 1),
     ]);
     expect(loop.brokenByPause, isFalse);
     expect(loop.closed, isTrue);
+  });
+
+  test('laço fechado sem área não promete território', () {
+    // Ida e volta no mesmo traçado: fecha (gap 0) mas não encerra área nenhuma,
+    // e o servidor recusa a conquista por baixo do piso de 100 m².
+    final loop = TerritoryLoop.fromTrack([
+      point(0, 0),
+      point(step, 0),
+      point(2 * step, 0),
+      point(0, 0),
+    ]);
+    expect(loop.areaM2, lessThan(TerritoryLoop.minAreaM2));
+    expect(loop.closed, isFalse);
+    expect(loop.label, contains('pequena demais'));
+  });
+
+  test('a área do laço é medida nos metros que o servidor usa', () {
+    // Quadrado de ~22 m por ~11 m: o suficiente para ser território.
+    final loop = TerritoryLoop.fromTrack([
+      point(0, 0),
+      point(2 * step, 0),
+      point(2 * step, step),
+      point(0, step),
+      point(0, 0),
+    ]);
+    expect(loop.areaM2, inInclusiveRange(200, 300));
+    expect(loop.closed, isTrue);
+    expect(loop.label, contains('Laço fechado'));
+  });
+
+  test('acima de 25 km² o laço passa do limite de um território', () {
+    final loop = TerritoryLoop.fromTrack([
+      point(0, 0),
+      point(0.5, 0),
+      point(0.5, 0.5),
+      point(0, 0.5),
+      point(0, 0),
+    ]);
+    expect(loop.areaM2, greaterThan(TerritoryLoop.maxAreaM2));
+    expect(loop.closed, isFalse);
+    expect(loop.label, contains('25 km²'));
   });
 }

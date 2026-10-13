@@ -10,6 +10,7 @@ class TerritoryLoop {
     required this.gapM,
     required this.toleranceM,
     required this.pauseJumpM,
+    required this.areaM2,
   });
 
   final int points;
@@ -17,10 +18,17 @@ class TerritoryLoop {
   final double toleranceM;
   final double? pauseJumpM;
 
+  /// Área do polígono, nos mesmos metros quadrados que o servidor mede. O laço
+  /// fechado precisa de área: sem ela não existe território a conquistar, e a
+  /// tela não pode prometer "pode salvar" para um traçado que o servidor recusa.
+  final double areaM2;
+
   static const int minPoints = 4;
   static const double floorToleranceM = 30;
   static const double maxToleranceM = 120;
   static const double maxPauseGapM = 100;
+  static const double minAreaM2 = 100;
+  static const double maxAreaM2 = 25_000_000;
 
   /// Avalia o trajeto coletado. Cada ponto é o mapa enviado ao backend:
   /// `lat`, `lng` e, quando houver, `accuracy` (metros) e `segment` (pausas).
@@ -31,6 +39,7 @@ class TerritoryLoop {
         gapM: 0,
         toleranceM: floorToleranceM,
         pauseJumpM: null,
+        areaM2: 0,
       );
     }
     var jump = 0.0;
@@ -59,11 +68,34 @@ class TerritoryLoop {
         _accuracyOf(track.last),
       ),
       pauseJumpM: jump > 0 ? jump : null,
+      areaM2: _areaM2(track),
     );
   }
 
-  static double _tolerance(double? startAccuracy, double? endAccuracy) {
-    if (startAccuracy == null || endAccuracy == null) return floorToleranceM;
+  /// Mesma projeção equirretangular do `polygon_area_m2` do backend, com o
+  /// shoelace do anel: o número mostrado na corrida tem de ser o número que o
+  /// servidor mede ao aceitar (ou recusar) o território.
+  static double _areaM2(List<Map<String, dynamic>> track) {
+    if (track.length < 3) return 0;
+    var latSum = 0.0;
+    for (final point in track) {
+      latSum += _lat(point);
+    }
+    final mPerDegLat = 111320.0;
+    final mPerDegLng =
+        111320.0 * math.cos(latSum / track.length * math.pi / 180);
+    var sum = 0.0;
+    for (var i = 0; i < track.length; i++) {
+      final a = track[i];
+      final b = track[(i + 1) % track.length];
+      sum +=
+          (_lng(a) * mPerDegLng) * (_lat(b) * mPerDegLat) -
+          (_lng(b) * mPerDegLng) * (_lat(a) * mPerDegLat);
+    }
+    return sum.abs() / 2;
+  }
+
+  static double _tolerance(double? startAccuracy, double? endAccuracy) {    if (startAccuracy == null || endAccuracy == null) return floorToleranceM;
     final uncertainty = math.sqrt(
       math.max(0, startAccuracy) * math.max(0, startAccuracy) +
           math.max(0, endAccuracy) * math.max(0, endAccuracy),
@@ -108,7 +140,11 @@ class TerritoryLoop {
   /// Maior distância entre uma pausa e a retomada que o traçado ainda aceita.
   bool get brokenByPause => (pauseJumpM ?? 0) > maxPauseGapM;
 
-  bool get closed => enoughPoints && !brokenByPause && gapM <= toleranceM;
+  /// Área suficiente para ser território, e dentro do teto de um laço.
+  bool get hasTerritoryArea => areaM2 >= minAreaM2 && areaM2 <= maxAreaM2;
+
+  bool get closed =>
+      enoughPoints && !brokenByPause && gapM <= toleranceM && hasTerritoryArea;
 
   /// Quantos metros faltam para o laço fechar; zero quando já está fechado.
   double get remainingM => closed ? 0 : math.max(0, gapM - toleranceM);
@@ -122,7 +158,18 @@ class TerritoryLoop {
       return 'Você retomou a ~${(pauseJumpM ?? 0).round()}m de onde parou: '
           'o território precisa de um traçado contínuo.';
     }
-    if (closed) return 'Laço fechado. Pode salvar que o território é seu.';
-    return 'Faltam ~${remainingM.round()}m para voltar ao ponto de partida e fechar o laço.';
+    if (gapM > toleranceM) {
+      return 'Faltam ~${remainingM.round()}m para voltar ao ponto de partida e fechar o laço.';
+    }
+    if (areaM2 < minAreaM2) {
+      return 'O laço fechou, mas a área é pequena demais para virar território '
+          '(~${areaM2.round()} m² de um mínimo de ${minAreaM2.round()} m²). '
+          'Amplie o trajeto.';
+    }
+    if (areaM2 > maxAreaM2) {
+      return 'O laço fechou, mas a área passou de '
+          '${(maxAreaM2 / 1000000).round()} km² — o limite de um território.';
+    }
+    return 'Laço fechado. Pode salvar que o território é seu.';
   }
 }
