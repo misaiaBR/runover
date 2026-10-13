@@ -3,7 +3,15 @@ from uuid import uuid4
 
 from app.models import CoinTransaction, UserItem
 from app.services import coins
-from app.services.shop import CATALOG, SCOPES, get_item
+from app.services.shop import (
+    CATALOG,
+    EFFECT_KINDS,
+    FRAME_STYLES,
+    PLATE_STYLES,
+    SCOPES,
+    _VOCABULARIES,
+    get_item,
+)
 
 
 def _track(num_points=70, offset_minutes=0):
@@ -79,23 +87,19 @@ def test_everything_is_animated(client):
         assert all(i["payload"].get("animated") is True for i in items)
 
 
+# Chaves que não mudam o desenho: a política de "tudo animado", o degrau da
+# escada de animação e a coleção da vitrine. O resto do payload é o que a loja
+# mostra — e é isso que não pode se repetir.
+_NOT_VISUAL = {"animated", "tier", "collection"}
+
+
 def _look(item):
     """O que o app desenha do payload — dois itens com o mesmo `look` são o
     mesmo item repetido na vitrine, mesmo com id e nome diferentes."""
-    payload = item["payload"]
-    category = item["category"]
-    if category == "avatar":
-        return ("avatar", payload.get("generated"), payload.get("asset"),
-                payload.get("seed"))
-    if category == "effect":
-        return ("effect", payload.get("kind"), payload.get("density"),
-                payload.get("cycle_ms"))
-    if category == "emoticon":
-        return ("emoticon", tuple(sorted(payload.get("emoji") or ())))
-    if category == "bundle":
-        return ("bundle", tuple(sorted(payload.get("grants") or ())))
-    return (category, tuple(payload.get("colors") or ()),
-            bool(payload.get("glow")))
+    return tuple(sorted(
+        (key, str(value)) for key, value in item["payload"].items()
+        if key not in _NOT_VISUAL
+    ))
 
 
 def test_no_two_items_look_the_same(client):
@@ -111,6 +115,35 @@ def test_no_two_items_look_the_same(client):
                 "desenham a mesma coisa"
             )
             seen[key] = item["name"]
+
+
+def test_every_visual_family_is_on_the_shelf(client):
+    """O vocabulário inteiro chega à vitrine pessoal.
+
+    Não basta o catálogo conhecer dezenove efeitos: se a loja só mostra faíscas
+    e chamas, a variedade é da tabela e não da prateleira.
+    """
+    items = client.get("/shop/catalog", params={"scope": "user"}).json()
+    kinds = {i["payload"]["kind"] for i in items if i["category"] == "effect"}
+    assert kinds == set(EFFECT_KINDS)
+    styles = {i["payload"].get("style") for i in items if i["category"] == "frame"}
+    assert styles >= set(FRAME_STYLES)
+    plates = {i["payload"].get("plate") for i in items if i["category"] == "banner"}
+    assert plates >= set(PLATE_STYLES)
+
+
+def test_no_item_announces_an_unknown_renderer(client):
+    """Todo renderizador nomeado num payload existe na tabela do serviço.
+
+    É a mesma checagem do boot, vista pela API: um `kind` ou `style` fora da
+    lista seria um item que a loja anuncia e o app não sabe desenhar.
+    """
+    for item in client.get("/shop/catalog").json():
+        for key, value in item["payload"].items():
+            allowed = _VOCABULARIES.get((item["category"], key))
+            if allowed is None or not isinstance(value, str):
+                continue
+            assert value in allowed, f"{item['id']}: {item['category']}.{key}={value!r}"
 
 
 def test_animation_tier_follows_the_price(client):
