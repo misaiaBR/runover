@@ -67,11 +67,19 @@ def _takeover_counts(db: Session, territory_id: str | None = None) -> dict[str, 
 
 
 def _owner_fields(owner: TerritoryOwnership | None) -> tuple[str | None, str | None]:
+    """Quem aparece como dono na interface. `None` = território livre.
+
+    A linha de posse existe mas o dono não (conta excluída, equipe dissolvida):
+    isso é "sem dono", não um nome em branco — mostrar o contrário faria o mapa
+    inteiro depender de um usuário que não existe mais.
+    """
     if owner is None:
         return None, None
     if owner.owner_team_id:
-        return "team", owner.owner_team.name
-    return "user", owner.owner_user.username
+        team = owner.owner_team
+        return ("team", team.name) if team else (None, None)
+    user = owner.owner_user
+    return ("user", user.username) if user else (None, None)
 
 
 def _current_mark(db: Session, territory_id: str) -> ConquestMark | None:
@@ -107,7 +115,7 @@ def _to_summary(t: Territory, owner: TerritoryOwnership | None, takeovers: int =
         coordinates=polygon_to_latlng(t.geojson),
         center={"lat": lat, "lng": lng},
         radius_m=t.radius_m,
-        status="conquistado" if owner else "disponivel",  # RF07 / enum `status` do diagrama de classes
+        status="conquistado" if owner_display else "disponivel",  # RF07 / enum `status` do diagrama de classes
         owner_type=owner_type,
         owner_display=owner_display,
         takeovers=takeovers,
@@ -255,6 +263,10 @@ def get_territory(territory_id: str, db: Session = Depends(get_db), _: User = De
         if owner and o.id == owner.id:
             continue
         owner_type, owner_display = _owner_fields(o)
+        # Posse sem dono resolvido (conta excluída, equipe dissolvida) não é um
+        # nome para listar: o histórico mostra quem teve o território.
+        if owner_type is None or owner_display is None:
+            continue
         history.append({"owner_type": owner_type, "owner_display": owner_display, "conquered_at": o.conquered_at})
     return TerritoryDetail(
         **summary.model_dump(),

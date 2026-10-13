@@ -9,7 +9,7 @@ usuário que estava correndo: por isso ScoreEvent guarda ou `user_id` ou
 """
 from datetime import datetime
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import settings
@@ -78,7 +78,13 @@ def team_level_trail(score: int) -> list[dict]:
 
 
 def current_ownerships(db: Session) -> list[TerritoryOwnership]:
-    """A posse atual é a última linha por data, com desempate estável por ID."""
+    """A posse atual é a última linha por data, com desempate estável por ID.
+
+    Linha sem dono resolvido fica de fora. Excluir conta e dissolver equipe
+    anulam `owner_user_id`/`owner_team_id` de propósito (o território volta a
+    ficar livre, o histórico fica), e uma dessas linhas no topo faria o mapa
+    procurar um usuário que não existe mais.
+    """
     latest = db.query(
         TerritoryOwnership.id.label("ownership_id"),
         func.row_number().over(
@@ -94,6 +100,12 @@ def current_ownerships(db: Session) -> list[TerritoryOwnership]:
         )
         .join(latest, TerritoryOwnership.id == latest.c.ownership_id)
         .filter(latest.c.rank == 1)
+        .filter(
+            or_(
+                TerritoryOwnership.owner_user_id.isnot(None),
+                TerritoryOwnership.owner_team_id.isnot(None),
+            )
+        )
         .all()
     )
 
