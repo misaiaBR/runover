@@ -736,10 +736,15 @@ class OfferCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
+          // `Wrap`, não `Row`: com os dois selos e a fonte ampliada, a linha
+          // única passava da borda do cartão e o `Clip` do gradiente comia o
+          // selo de parceria. Sem espaço, o segundo selo desce de linha.
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            spacing: 6,
+            runSpacing: 4,
             children: [
               _TierSeal(label: tier.label),
-              const Spacer(),
               if (item.payload['collection'] == 'parceria')
                 const _TierSeal(label: 'Parceria', color: Pal.purple),
             ],

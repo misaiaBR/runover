@@ -582,4 +582,54 @@ void main() {
     expect(calls.lastLeave, isNotNull);
     expect(calls.lastLeave!.containsKey('successor_username'), isFalse);
   });
+
+  // #120: a caixa é o que ela mostra. O bloco de perfil tem prévia, aviso,
+  // botão de loja e campo de nome; com nome comprido e fonte ampliada nada
+  // pode sair pela borda — o `Clip` do cartão cortaria em silêncio.
+  for (final (label, size) in [
+    ('no celular', const Size(390, 2600)),
+    ('na janela larga', const Size(1280, 1600)),
+  ]) {
+    testWidgets('a caixa de perfil caiba o nome comprido $label', (
+      tester,
+    ) async {
+      tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      const name = 'Corredores da madrugada infinita';
+      await openTeamSettings(
+        tester,
+        teamSettingsJson(name: name, inviteToken: 'tok'),
+        size: size,
+      );
+
+      final nameField = find.widgetWithText(TextFormField, 'Nome da equipe');
+      final box = find.ancestor(of: nameField, matching: find.byType(Card));
+      expect(box, findsOneWidget);
+      Rect rect(Finder finder) {
+        final render = finder.evaluate().first.renderObject! as RenderBox;
+        return render.localToGlobal(Offset.zero) & render.size;
+      }
+
+      final card = rect(box);
+      expect(tester.widget<TextFormField>(nameField).controller!.text, name);
+      for (final control in [
+        find.byKey(const Key('team-pick-emblem')),
+        nameField,
+      ]) {
+        expect(control, findsOneWidget, reason: '$control');
+        final r = rect(control);
+        expect(
+          r.right,
+          lessThanOrEqualTo(card.right + 0.5),
+          reason: '$control passou da borda direita da caixa',
+        );
+        expect(
+          r.bottom,
+          lessThanOrEqualTo(card.bottom + 0.5),
+          reason: '$control passou da borda de baixo da caixa',
+        );
+      }
+      expect(tester.takeException(), isNull);
+    });
+  }
 }

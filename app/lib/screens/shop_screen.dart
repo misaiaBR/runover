@@ -983,17 +983,28 @@ class _FeaturedBundles extends StatelessWidget {
               // de enchimento e some no tema claro.
               Icon(Icons.star, color: Pal.goldInk(context), size: 20),
               const SizedBox(width: 6),
-              const Text(
-                'Pacotes em destaque',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+              // O título é o único filho que pode encolher: sem isto, numa
+              // janela estreita com fonte ampliada ele passa do fim da linha e
+              // a faixa toda sai cortada.
+              const Flexible(
+                child: Text(
+                  'Pacotes em destaque',
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),
         ),
-        // Altura fixa acompanha a escala de texto: o card do pacote tem
-        // nome, subtítulo, preço e botão, que crescem com a fonte.
+        // Altura do carrossel: o card mais cheio dele tem nome e subtítulo de
+        // duas linhas, preço e botão. Os 208 já vêm medidos com a fonte do
+        // teste (que é mais larga que a real), então sobra folga de verdade.
         SizedBox(
-          height: 176 * MediaQuery.textScalerOf(context).scale(1.0),
+          height: 208 * MediaQuery.textScalerOf(context).scale(1.0),
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -1020,6 +1031,19 @@ class _FeaturedBundles extends StatelessWidget {
   }
 }
 
+/// Largura do card em destaque: a banda inteira da tela no celular, limitada a
+/// 360 nas janelas largas.
+///
+/// Com 280 fixos, um card de 280 numa tela de 390 deixava metade do preço e do
+/// botão fora da dobra — o conteúdo saía cortado da caixa sem que nada na caixa
+/// avisasse. O piso de 260 é o canto onde a arte de 120 e os 116 de texto
+/// ainda cabem, numa janela do tamanho de um relógio.
+double _featuredCardWidth(BuildContext context) {
+  final band = MediaQuery.sizeOf(context).width;
+  final room = (band > 1080 ? 1080.0 : band) - 40;
+  return room < 260 ? 260.0 : (room > 360 ? 360.0 : room);
+}
+
 class _FeaturedCard extends StatelessWidget {
   const _FeaturedCard({
     required this.item,
@@ -1044,7 +1068,7 @@ class _FeaturedCard extends StatelessWidget {
     final grants =
         (item.payload['grants'] as List? ?? const []).length;
     return SizedBox(
-      width: 280,
+      width: _featuredCardWidth(context),
       child: Card(
         clipBehavior: Clip.antiAlias,
         child: InkWell(
@@ -1171,24 +1195,32 @@ class _PriceTag extends StatelessWidget {
         ),
       );
     }
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(
-          Icons.monetization_on,
-          color: Pal.goldInk(context),
-          size: 18,
-        ),
-        const SizedBox(width: 4),
-        Text(
-          formatPoints(price),
-          style: TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w800,
-            color: scheme.onSurface,
+    // `scaleDown`, não `Row` solto: o preço é a informação que decide a
+    // compra, e num card estreito com fonte ampliada a linha estourava a caixa
+    // e o `Clip` do cartão comia os últimos algarismos. Assim ele encolhe a
+    // si mesmo antes de encolher a borda de quem o contém.
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.monetization_on,
+            color: Pal.goldInk(context),
+            size: 18,
           ),
-        ),
-      ],
+          const SizedBox(width: 4),
+          Text(
+            formatPoints(price),
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              color: scheme.onSurface,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
