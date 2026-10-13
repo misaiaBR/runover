@@ -176,7 +176,11 @@ class SeasonPassHighlightPanel extends StatelessWidget {
   /// servidor deu quando o catálogo não conhece o item.
   Widget _art() {
     final child = switch (reward.item) {
-      final item when item != null => ShopPreview(item: item, scale: 1.05),
+      final item when item != null => ShopPreview(
+        item: item,
+        scale: 1.05,
+        onDarkSurface: true,
+      ),
       _ when reward.coins > 0 => SeasonPassCoinStack(
         coins: reward.coins,
         size: 74,

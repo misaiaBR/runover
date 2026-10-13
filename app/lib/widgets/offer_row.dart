@@ -204,25 +204,29 @@ class OfferArt extends StatelessWidget {
           width: 2,
         ),
       ),
-      child: Stack(
-        children: [
-          Center(child: ShopPreview(item: item, scale: 0.62)),
-          if (item.category == 'effect')
-            Positioned.fill(
-              child: ProfileEffectOverlay(effect: item),
-            ),
-        ],
+      child: Center(
+        child: ShopPreview(item: item, scale: 0.62, onDarkSurface: true),
       ),
     );
   }
 }
 
 /// Prévia do produto (tamanhos escaláveis para fileira e detalhes).
+///
+/// [onDarkSurface] é para as caixas de arte, cujo fundo é o gradiente fixo da
+/// raridade e não o cartão do tema: o efeito desenhado ali precisa de tinta
+/// clara, senão desaparece no azul-escuro.
 class ShopPreview extends StatelessWidget {
-  const ShopPreview({super.key, required this.item, this.scale = 1.0});
+  const ShopPreview({
+    super.key,
+    required this.item,
+    this.scale = 1.0,
+    this.onDarkSurface = false,
+  });
 
   final ShopItem item;
   final double scale;
+  final bool onDarkSurface;
 
   @override
   Widget build(BuildContext context) {
@@ -279,9 +283,20 @@ class ShopPreview extends StatelessWidget {
           ),
         ),
       ),
-      'effect' => Text(
-        (item.payload['kind'] ?? 'sparkle') == 'fire' ? '🔥' : '✨',
-        style: TextStyle(fontSize: 44 * scale),
+      // O efeito ocupa a caixa inteira: ele é o produto, não um rótulo dele.
+      'effect' => LayoutBuilder(
+        builder: (context, constraints) => SizedBox(
+          width: constraints.maxWidth.isFinite
+              ? constraints.maxWidth
+              : 132 * scale,
+          height: constraints.maxHeight.isFinite
+              ? constraints.maxHeight
+              : 96 * scale,
+          child: ProfileEffectOverlay(
+            effect: item,
+            onDarkSurface: onDarkSurface,
+          ),
+        ),
       ),
       'emoticon' => Breathe(
         seed: item.id,
@@ -292,15 +307,70 @@ class ShopPreview extends StatelessWidget {
           style: TextStyle(fontSize: 34 * scale),
         ),
       ),
-      'bundle' => Breathe(
-        seed: item.id,
-        child: Text(
-          '📦',
-          style: TextStyle(fontSize: 44 * scale),
-        ),
-      ),
+      'bundle' => BundleCover(item: item, scale: scale),
       _ => const Icon(Icons.style_outlined, size: 40),
     };
+  }
+}
+
+/// Capa do pacote: as cartas que ele libera, em leque, na cor do `colors` do
+/// item. Cem pacotes com a mesma caixa de emoji não se distinguem antes do
+/// toque, e o catálogo já dá capa própria a cada um.
+class BundleCover extends StatelessWidget {
+  const BundleCover({
+    super.key,
+    required this.item,
+    this.scale = 1.0,
+  });
+
+  final ShopItem item;
+  final double scale;
+
+  @override
+  Widget build(BuildContext context) {
+    final gradient = bannerGradient(item);
+    final grants = (item.payload['grants'] as List? ?? const []).length;
+    // Uma carta de frente sempre existe; o leque tem no máximo as três que o
+    // pacote libera.
+    final count = grants < 1 ? 1 : (grants > 3 ? 3 : grants);
+    return SizedBox(
+      width: 78 * scale,
+      height: 62 * scale,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          for (var i = 0; i < count; i++)
+            // A carta da frente fica reta; as de trás saem do leque e sobem.
+            Transform.rotate(
+              angle: (count - 1 - i) * -0.18,
+              child: Transform.translate(
+                offset: Offset(
+                  (count - 1 - i) * -5 * scale,
+                  (count - 1 - i) * 4 * scale,
+                ),
+                child: Container(
+                  width: 44 * scale,
+                  height: 40 * scale,
+                  decoration: BoxDecoration(
+                    gradient: gradient,
+                    borderRadius: BorderRadius.circular(8 * scale),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.4),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.25),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }
 
@@ -494,13 +564,8 @@ class _OfferArtTile extends StatelessWidget {
         color: Colors.white.withValues(alpha: 0.22),
         borderRadius: BorderRadius.circular(18),
       ),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Center(child: ShopPreview(item: item, scale: 0.68)),
-          if (item.category == 'effect')
-            Positioned.fill(child: ProfileEffectOverlay(effect: item)),
-        ],
+      child: Center(
+        child: ShopPreview(item: item, scale: 0.68, onDarkSurface: true),
       ),
     );
   }

@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 
 import '../models.dart';
 import '../services/profile_image_provider.dart';
+import 'effect_painters.dart';
 import 'runover_ui.dart';
 
 /// O que a categoria do cosmético entrega no perfil.
@@ -268,10 +269,24 @@ TextStyle styledName(
   );
 }
 
-/// Efeito do perfil: camada animada de brilho/partículas sobre o cartão.
+/// Efeito do perfil: a camada animada do tipo equipado sobre o cartão.
+///
+/// O desenho vem de `payload['kind']` — um renderizador por tipo, em
+/// `effect_painters.dart` —, a velocidade de `cycle_ms` e a cor de `hue`. O
+/// campo inteiro é decorativo (`IgnorePointer`), nunca um botão.
+///
+/// [onDarkSurface] diz o que a camada está cobrindo: o cartão do tema (perfil,
+/// ficha do produto) ou o gradiente fixo e escuro da raridade (a caixa de arte
+/// da vitrine e do passe). No segundo caso a tinta legível do tema claro é
+/// preta sobre azul-marinho e some — ali a partícula continua branca.
 class ProfileEffectOverlay extends StatefulWidget {
-  const ProfileEffectOverlay({super.key, required this.effect});
+  const ProfileEffectOverlay({
+    super.key,
+    required this.effect,
+    this.onDarkSurface = false,
+  });
   final ShopItem effect;
+  final bool onDarkSurface;
 
   @override
   State<ProfileEffectOverlay> createState() => _ProfileEffectOverlayState();
@@ -286,8 +301,19 @@ class _ProfileEffectOverlayState extends State<ProfileEffectOverlay>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2400),
+      duration: EffectSpec.from(widget.effect).cycle,
     )..repeat();
+  }
+
+  @override
+  void didUpdateWidget(ProfileEffectOverlay oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.effect.id == widget.effect.id) return;
+    // Outro item é outro ciclo: névoa respira em segundos, estroboscópio pisca
+    // em menos de um. Ajustar a duração é o que faz a prévia tocar no ritmo que
+    // o servidor deu.
+    _controller.duration = EffectSpec.from(widget.effect).cycle;
+    _controller.repeat();
   }
 
   @override
@@ -298,62 +324,28 @@ class _ProfileEffectOverlayState extends State<ProfileEffectOverlay>
 
   @override
   Widget build(BuildContext context) {
-    final kind = widget.effect.payload['kind'] ?? 'sparkle';
-    final glyph = kind == 'fire' ? '🔥' : '✨';
-    // A camada cobre o cartão inteiro, e não só a faixa de gradiente: o branco
-    // do mockup só aparecia sobre o roxo escuro. Na tinta do brilho a partícula
-    // continua branca no escuro e vira quase-preta sobre o cartão branco.
-    final ink = Pal.of(context).heading;
+    final spec = EffectSpec.from(widget.effect);
+    final raw = spec.tint();
+    final accent = widget.onDarkSurface
+        ? raw
+        : legibleInk(raw, context);
+    final neutral = widget.onDarkSurface
+        ? Colors.white
+        : Pal.of(context).heading;
     return IgnorePointer(
       child: AnimatedBuilder(
         animation: _controller,
         builder: (_, _) => CustomPaint(
-          painter: _ParticlesPainter(
+          painter: StageEffectPainter(
+            spec: spec,
             progress: _controller.value,
-            glyph: glyph,
-            ink: ink,
+            accent: accent,
+            neutral: neutral,
           ),
         ),
       ),
     );
   }
-}
-
-class _ParticlesPainter extends CustomPainter {
-  _ParticlesPainter({
-    required this.progress,
-    required this.glyph,
-    required this.ink,
-  });
-  final double progress;
-  final String glyph;
-  final Color ink;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final rng = math.Random(7);
-    for (var i = 0; i < 8; i++) {
-      final x = rng.nextDouble() * size.width;
-      final cycle = (progress + i / 8) % 1;
-      final y = (size.height + 10) + (-30.0 - size.height - 10) * cycle;
-      final opacity = (1 - cycle) * 0.8;
-      final painter = TextPainter(
-        text: TextSpan(
-          text: glyph,
-          style: TextStyle(
-            fontSize: 14 + rng.nextDouble() * 8,
-            color: ink.withValues(alpha: opacity.clamp(0.0, 1.0)),
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      painter.paint(canvas, Offset(x, y));
-    }
-  }
-
-  @override
-  bool shouldRepaint(_ParticlesPainter old) =>
-      old.progress != progress || old.ink != ink || old.glyph != glyph;
 }
 
 /// Avatar da galeria pronta: resolve o asset pelo `payload['asset']`.

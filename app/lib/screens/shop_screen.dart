@@ -1067,7 +1067,7 @@ class _FeaturedCard extends StatelessWidget {
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
-                    const Text('📦', style: TextStyle(fontSize: 56)),
+                    BundleCover(item: item, scale: 1.3),
                     Positioned(
                       bottom: 12,
                       child: Container(
@@ -1273,11 +1273,8 @@ class _PreviewZone extends StatelessWidget {
       ),
       child: Stack(
         children: [
+          // A prévia do efeito já ocupa a zona inteira; ver [ShopPreview].
           Center(child: ShopPreview(item: item)),
-          if (item.category == 'effect')
-            Positioned.fill(
-              child: ProfileEffectOverlay(effect: item),
-            ),
           if (item.payload['collection'] == 'parceria')
             const Positioned(
               top: 6,
