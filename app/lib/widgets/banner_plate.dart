@@ -250,10 +250,10 @@ class _BannerPlateState extends State<BannerPlate>
       return;
     }
     // Reacender o relógio é trocar de faixa, não reconstruir a tela: `repeat()`
-    // grava o período e volta o valor a zero, então chamá-lo a cada `setState`
-    // do perfil faria a respiração soluçar no meio do ciclo. A faixa nova com
-    // período novo precisa do `repeat()` justamente por isso — o período só é
-    // lido no instante em que ele é chamado.
+    // grava o período no instante em que é chamado e recomeça a perna de ida do
+    // ciclo, então chamá-lo a cada `setState` do perfil adotaria o ritmo errado
+    // para a faixa nova e reinventaria a respiração da mesma faixa. O `repeat()`
+    // só é preciso quando o período mudou de verdade.
     if (_controller.duration == period && _controller.isAnimating) return;
     _controller
       ..duration = period
@@ -327,6 +327,11 @@ class _BannerPlateState extends State<BannerPlate>
     // O paralaxe é o único estilo que escuta o ponteiro: sem ele a placa
     // respira sozinha, com ele o fundo vai contra a mão de quem olha.
     return MouseRegion(
+      // O `Listener` só vê `onPointerMove` com botão pressionado. Na web e no
+      // desktop quem passa o mouse sem clicar gera evento de hover, e é ele que
+      // faz a placa seguir a mão — sem esta linha o paralaxe só existiria
+      // durante um arrasto.
+      onHover: _trackPointer,
       onExit: (_) => setState(() => _pointer = Offset.zero),
       child: Listener(onPointerMove: _trackPointer, child: clipped),
     );
@@ -429,7 +434,7 @@ class PlatePainter extends CustomPainter {
     final box = Offset.zero & size;
     final radians = spec.angle * math.pi / 180;
     final direction = Offset(math.cos(radians), math.sin(radians));
-    final slide = (progress + 1) % 2 - 1; // -1..1 e volta, sem salto
+    final slide = _wave; // -1..1 em onda contínua: o ciclo vira sem tranco
     final colors = spec.colors;
     final stops = <double>[];
     final painted = <Color>[];

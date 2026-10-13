@@ -22,6 +22,12 @@ import '../models.dart';
 
 const double _tau = 6.283185307179586;
 
+/// O teto de WCAG 2.3.1 para flashes: três por segundo. Não é capricho estético —
+/// luz piscando cobrindo área grande acima dessa taxa é gatilho de crise em quem
+/// tem fotossensibilidade, e o perfil é justamente a tela onde outra pessoa pode
+/// acabar olhando o seu.
+const int kMaxFlashesPerSecond = 3;
+
 /// Os tipos que este arquivo desenha: a mesma lista de `EFFECT_KINDS` do
 /// catálogo. Um `kind` fora dela cai em `sparkle` — a loja não desenha um efeito
 /// que ela não conhece, e o teste da vitrine no backend não deixa anunciar um.
@@ -89,6 +95,18 @@ class EffectSpec {
 
   /// Um ciclo completo do efeito — é a duração do controller que anima a camada.
   Duration get cycle => Duration(milliseconds: cycleMs);
+
+  /// Quantos flashes o `strobe` dá dentro de um ciclo. O `density` sozinho não é
+  /// seguro: com o piso de 600 ms do `cycle_ms` ele pediria dezenas por segundo.
+  /// O que o item escolhe vale até onde o relógio suporta — [kMaxFlashesPerSecond]
+  /// por segundo, nem um a mais.
+  int get strobeFlashes {
+    final tetoDoCiclo = math.max(
+      1,
+      (cycleMs / 1000 * kMaxFlashesPerSecond).floor(),
+    );
+    return math.min(tetoDoCiclo, math.max(1, density));
+  }
 
   /// Cor do tipo, do matiz que o servidor deu para o item.
   Color tint({double saturation = .85, double value = 1, double shift = 0}) =>
@@ -636,7 +654,7 @@ class StageEffectPainter extends CustomPainter {
   }
 
   void _strobe(Canvas canvas, Size size, math.Random r, double t) {
-    final pulses = math.max(2, spec.density);
+    final pulses = spec.strobeFlashes;
     final frac = (t * pulses) % 1;
     final intensity = math.pow(math.sin(frac * math.pi), 8).toDouble();
     if (intensity < 0.01) return;

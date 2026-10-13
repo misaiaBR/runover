@@ -161,6 +161,31 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('reconstruir a tela não inverte o pulso do anel simples', (
+    tester,
+  ) async {
+    // O anel de cor vai e volta (`reverse: true`). `repeat()` recomeça a perna
+    // de ida, então reacender o relógio em todo rebuild do perfil — que escuta
+    // `AppState` e tem `FutureBuilder` — faria o brilho trocar de direção no
+    // meio do respiro. O brilho é a leitura visível da perna do pulso.
+    final frame = _frame('frame_simples', tier: 4); // período de 500 ms
+    await _wear(tester, frame: frame);
+    await tester.pump(const Duration(milliseconds: 400));
+    final subindo = _glow(tester);
+    await tester.pump(const Duration(milliseconds: 450)); // virou e desce
+    final descendo = _glow(tester);
+    expect(descendo, lessThan(subindo), reason: 'o anel deveria estar descendo');
+
+    await _wear(tester, frame: frame); // mesma moldura, só pintou de novo
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(
+      _glow(tester),
+      lessThan(descendo),
+      reason: 'a reconstrução virou a perna do pulso',
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('os quatro patamares desenham o anel sem exceção', (
     tester,
   ) async {

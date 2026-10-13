@@ -384,6 +384,20 @@ class BundleCover extends StatelessWidget {
   }
 }
 
+/// Os nomes dos itens que um pacote libera, na ordem do `grants` do payload.
+///
+/// Única leitura de `grants` para exibição — a linha da loja e a ficha de
+/// detalhes, nas duas lojas, resolvem por aqui. Um id que o catálogo informado
+/// não conhece fica de fora: identificador interno não aparece na interface, e
+/// uma lista de presentes escrita em código confunde mais do que informa. Pacote
+/// com nada resolvido devolve lista vazia, e quem mostra perde a seção inteira.
+List<String> grantNames(ShopItem item, List<ShopItem> catalog) {
+  final grants = item.payload['grants'] as List? ?? const [];
+  return [for (final id in grants) findItem(catalog, '$id')?.name]
+      .nonNulls
+      .toList();
+}
+
 /// Botão verde de preço estilo CR (vira Equipar/Equipada quando é seu).
 class _OfferPriceButton extends StatelessWidget {
   const _OfferPriceButton({

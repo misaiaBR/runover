@@ -220,6 +220,10 @@ void main() {
     tester.view.physicalSize = const Size(800, 1400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
+    // O scale test value não sai do `view.reset`: sem isto ele vaza para os
+    // testes seguintes do arquivo e a grade lazy para de construir o card que
+    // eles procuram.
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
     await _pumpShop(tester, [
       {
         'id': 'bundle_grande',
@@ -279,5 +283,71 @@ void main() {
     expect(find.textContaining('Inclui: Corredor'), findsWidgets);
     expect(find.textContaining('team_avatar_bandeira'), findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  // A ficha de detalhes é a segunda boca do mesmo pacote: ela montava a lista
+  // "Inclui" direto do payload e, sem match no catálogo, despejava o id cru na
+  // tela. Passa pela resolução compartilhada, então o que não tem nome não tem
+  // linha.
+  testWidgets('a ficha do pacote não mostra id interno na lista "Inclui"', (
+    tester,
+  ) async {
+    await _pumpShop(tester, [
+      _avatar('avatar_corredor', 'Corredor', 50),
+      {
+        'id': 'bundle_pacote',
+        'category': 'bundle',
+        'name': 'Pacote do corredor',
+        'price': 300,
+        'payload': {
+          'animated': true,
+          'grants': ['avatar_corredor', 'team_avatar_bandeira'],
+        },
+      },
+    ]);
+
+    final card = find.byWidgetPredicate(
+      (widget) => widget is OfferCard && widget.item.id == 'bundle_pacote',
+    );
+    // A grade é lazy e a dobra de teste tem 600 px: sem trazer o card para
+    // dentro, o toque cai no vazio e a ficha nunca abre.
+    await tester.ensureVisible(card);
+    await tester.pump();
+    // 'Corredor' já é card na vitrine; a linha da ficha é um a mais.
+    final naVitrine = find.text('Corredor').evaluate().length;
+    await tester.tap(card);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    // A ficha abriu e a seção existe.
+    expect(find.byType(BottomSheet), findsOneWidget);
+    // O título da seção só existe na ficha.
+    expect(find.text('Inclui'), findsOneWidget);
+    expect(find.text('Corredor'), findsNWidgets(naVitrine + 1));
+    expect(find.textContaining('team_avatar_bandeira'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  test('grantNames resolve só o que o catálogo conhece', () {
+    final catalog = [
+      ShopItem.fromJson(_avatar('avatar_corredor', 'Corredor', 50)),
+    ];
+    ShopItem pacote(List<String> grants) => ShopItem.fromJson({
+      'id': 'bundle_pacote',
+      'category': 'bundle',
+      'name': 'Pacote do corredor',
+      'price': 300,
+      'payload': {'grants': grants},
+    });
+
+    expect(grantNames(pacote(['avatar_corredor']), catalog), ['Corredor']);
+    // Na ordem do payload, pulando o que não resolve.
+    expect(
+      grantNames(pacote(['avatar_corredor', 'team_avatar_bandeira']), catalog),
+      ['Corredor'],
+    );
+    expect(grantNames(pacote(['team_avatar_bandeira']), catalog), isEmpty);
+    // Item que não é pacote não tem presentes.
+    expect(grantNames(catalog.first, catalog), isEmpty);
   });
 }
