@@ -386,6 +386,9 @@ class _TeamItemDetailSheet extends StatelessWidget {
   final ShopItem item;
   final TeamWallet wallet;
   final TeamInventory inventory;
+
+  /// Catálogo da loja da equipe: é por ele que a lista "Inclui" resolve os
+  /// `grants` do pacote em nomes.
   final List<ShopItem> catalog;
   final bool canManage;
   final bool busy;
@@ -399,9 +402,7 @@ class _TeamItemDetailSheet extends StatelessWidget {
     final equipped = inventory.isEquipped(item);
     final isBundle = item.category == 'bundle';
     final missing = item.price - wallet.balance;
-    final grants = (item.payload['grants'] as List? ?? const [])
-        .map((e) => '$e')
-        .toList();
+    final included = grantNames(item, catalog);
     return SafeArea(
       child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
@@ -426,7 +427,7 @@ class _TeamItemDetailSheet extends StatelessWidget {
                 color: scheme.onSurfaceVariant,
               ),
             ),
-            if (grants.isNotEmpty) ...[
+            if (included.isNotEmpty) ...[
               const SizedBox(height: 12),
               const Text(
                 'Inclui',
@@ -436,7 +437,7 @@ class _TeamItemDetailSheet extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 6),
-              for (final id in grants)
+              for (final name in included)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 3),
                   child: Row(
@@ -449,11 +450,7 @@ class _TeamItemDetailSheet extends StatelessWidget {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          catalog
-                                  .where((c) => c.id == id)
-                                  .map((c) => c.name)
-                                  .firstOrNull ??
-                              id,
+                          name,
                           style: const TextStyle(fontSize: 14),
                         ),
                       ),
