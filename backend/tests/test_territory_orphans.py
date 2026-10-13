@@ -9,8 +9,7 @@ território pontuava pela área do laço, não pela área que mudou de mão.
 """
 
 import math
-import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 from app.geometry import geojson_to_polygon, polygon_area_m2
 from app.models import (
@@ -21,52 +20,7 @@ from app.models import (
     User,
 )
 from tests.auth_helpers import auth_headers
-
-LAT, LNG = -23.55, -46.63  # um bairro real não é requisito; só evita bordo de mapa
-# O servidor só aceita corrida dos últimos 7 dias e nenhuma no futuro: as
-# trilhas partem de dois dias atrás e somam um dia entre a conquista e o ataque.
-BASE = datetime.now(timezone.utc) - timedelta(days=2)
-
-
-def _square(step_m: float, *, walk_seconds: int, start: datetime) -> list[dict]:
-    """Laço quadrado fechado de `step_m` metros de lado, em 4 vértices + volta."""
-    d_lat = step_m / 111_320
-    d_lng = step_m / (111_320 * math.cos(math.radians(LAT)))
-    corners = [
-        (LAT, LNG),
-        (LAT + d_lat, LNG),
-        (LAT + d_lat, LNG + d_lng),
-        (LAT, LNG + d_lng),
-        (LAT, LNG),
-    ]
-    leg = walk_seconds // (len(corners) - 1)
-    return [
-        {
-            "lat": lat,
-            "lng": lng,
-            "timestamp": (start + timedelta(seconds=leg * i)).isoformat(),
-            "segment": 0,
-            "accuracy": 5.0,
-        }
-        for i, (lat, lng) in enumerate(corners)
-    ]
-
-
-def _run(client, headers, *, track, name, conquer=True, challenge=None, team_id=None):
-    body = {
-        "id": str(uuid.uuid4()),
-        "request_id": uuid.uuid4().hex,
-        "name": name,
-        "track": track,
-        "conquer": conquer,
-    }
-    if challenge:
-        body["challenge"] = challenge
-    if team_id:
-        body["team_id"] = team_id
-    response = client.post("/runs", json=body, headers=headers)
-    assert response.status_code == 200, response.text
-    return response.json()
+from tests.run_helpers import BASE, square_track, submit_run
 
 
 def test_territory_of_deleted_account_is_free_on_the_map(client, db_session):
@@ -82,8 +36,8 @@ def test_territory_of_deleted_account_is_free_on_the_map(client, db_session):
         ),
         radius_m=60,
         relevance=1,
-        center_lat=LAT,
-        center_lng=LNG,
+        center_lat=-23.5495,
+        center_lng=-46.6295,
     )
     db_session.add(territory)
     db_session.flush()
@@ -111,15 +65,16 @@ def test_losing_a_challenge_pays_nothing_and_is_not_a_conquest(client, db_sessio
     """Derrota no desafio salva a corrida, mas não é conquista."""
     owner = auth_headers(client, username="dono", email="dono@example.com")
     rival = auth_headers(client, username="rival", email="rival@example.com")
-    now = BASE
 
-    first = _run(client, owner, track=_square(120, walk_seconds=180, start=now),
-                 name="meu laço")
+    first = submit_run(
+        client, owner, track=square_track(120, walk_seconds=180, start=BASE),
+        name="meu laço",
+    )
     assert first["claim"]["created_new"] is True
 
-    lost = _run(
+    lost = submit_run(
         client, rival,
-        track=_square(120, walk_seconds=600, start=now + timedelta(days=1)),
+        track=square_track(120, walk_seconds=600, start=BASE + timedelta(days=1)),
         name="tentativa lenta", challenge="pace",
     )
     assert lost["claim"]["challenge_won"] is False, lost["claim"]
@@ -149,17 +104,18 @@ def test_retake_scores_the_territory_area_not_the_loop_area(client, db_session):
     volta olímpica que deu por cima dele."""
     owner = auth_headers(client, username="defensor", email="defensor@example.com")
     rival = auth_headers(client, username="atacante", email="atacante@example.com")
-    now = BASE
 
-    created = _run(client, owner, track=_square(120, walk_seconds=180, start=now),
-                   name="laço pequeno")
+    created = submit_run(
+        client, owner, track=square_track(120, walk_seconds=180, start=BASE),
+        name="laço pequeno",
+    )
     territory_id = created["claim"]["territory"]["id"]
     territory = db_session.get(Territory, territory_id)
     held_m2 = polygon_area_m2(geojson_to_polygon(territory.geojson))
 
-    giant = _run(
+    giant = submit_run(
         client, rival,
-        track=_square(1200, walk_seconds=1200, start=now + timedelta(days=1)),
+        track=square_track(1200, walk_seconds=1200, start=BASE + timedelta(days=1)),
         name="laço gigante", challenge="pace",
     )
     claim = giant["claim"]
