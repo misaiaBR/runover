@@ -159,7 +159,12 @@ class RankingRow:
         equipped_banner: str | None = None,
         equipped_name_style: str | None = None,
         trophies: int = 0,
+        owner_id: str | None = None,
     ):
+        # `owner_id` é a âncora de quem procura a própria posição: nome de
+        # usuário é único, nome de equipe não é único em relação a ele, e uma
+        # equipe chamada como um corredor devolveria a posição errada.
+        self.owner_id = owner_id
         self.owner_type = owner_type
         self.name = name
         self.photo_url = photo_url
@@ -218,6 +223,7 @@ def full_ranking(db: Session, since: datetime | None = None) -> list[RankingRow]
             equipped_banner=u.equipped_banner,
             equipped_name_style=u.equipped_name_style,
             trophies=u.trophies,
+            owner_id=u.id,
         ))
     for t in db.query(Team).all():
         rows.append(RankingRow(
@@ -227,6 +233,7 @@ def full_ranking(db: Session, since: datetime | None = None) -> list[RankingRow]
             equipped_effect=t.equipped_effect,
             equipped_banner=t.equipped_banner,
             equipped_name_style=t.equipped_name_style,
+            owner_id=t.id,
         ))
 
     rows.sort(key=lambda r: (-r.score, r.name.lower()))
@@ -234,11 +241,8 @@ def full_ranking(db: Session, since: datetime | None = None) -> list[RankingRow]
 
 
 def rank_position(db: Session, user_id: str) -> int | None:
-    user = db.get(User, user_id)
-    if not user:
-        return None
     for i, row in enumerate(full_ranking(db), start=1):
-        if row.owner_type == "user" and row.name == user.username:
+        if row.owner_type == "user" and row.owner_id == user_id:
             return i
     return None
 
@@ -247,9 +251,8 @@ def user_rank_positions(db: Session) -> dict[str, int]:
     """{user_id: posição} no ranking combinado (usuários + equipes), para todos
     os usuários — usado para detectar quem mudou de posição após uma conquista
     (RF18 / RN11)."""
-    id_by_name = {u.username: u.id for u in db.query(User).all()}
-    positions: dict[str, int] = {}
-    for i, row in enumerate(full_ranking(db), start=1):
-        if row.owner_type == "user" and row.name in id_by_name:
-            positions[id_by_name[row.name]] = i
-    return positions
+    return {
+        row.owner_id: i
+        for i, row in enumerate(full_ranking(db), start=1)
+        if row.owner_type == "user"
+    }
