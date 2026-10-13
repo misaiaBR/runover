@@ -51,6 +51,57 @@ def test_everything_is_animated(client):
         assert all(i["payload"].get("animated") is True for i in items)
 
 
+def _look(item):
+    """O que o app desenha do payload — dois itens com o mesmo `look` são o
+    mesmo item repetido na vitrine, mesmo com id e nome diferentes."""
+    payload = item["payload"]
+    category = item["category"]
+    if category == "avatar":
+        return ("avatar", payload.get("generated"), payload.get("asset"),
+                payload.get("seed"))
+    if category == "effect":
+        return ("effect", payload.get("kind"), payload.get("density"),
+                payload.get("cycle_ms"))
+    if category == "emoticon":
+        return ("emoticon", tuple(sorted(payload.get("emoji") or ())))
+    if category == "bundle":
+        return ("bundle", tuple(sorted(payload.get("grants") or ())))
+    return (category, tuple(payload.get("colors") or ()),
+            bool(payload.get("glow")))
+
+
+def test_no_two_items_look_the_same(client):
+    """A loja se mostra uma categoria de cada vez, em um escopo só."""
+    for scope in ("user", "team", "pass"):
+        items = client.get("/shop/catalog", params={"scope": scope}).json()
+        assert items
+        seen = {}
+        for item in items:
+            key = (item["category"], _look(item))
+            assert key not in seen, (
+                f"{scope}/{key[0]}: {seen.get(key)!r} e {item['name']!r} "
+                "desenham a mesma coisa"
+            )
+            seen[key] = item["name"]
+
+
+def test_animation_tier_follows_the_price(client):
+    """Quanto mais alto o tipo, mais animação: dentro da mesma categoria e
+    escopo, o `tier` nunca diminui quando o preço sobe."""
+    for scope in ("user", "team"):
+        items = client.get("/shop/catalog", params={"scope": scope}).json()
+        by_category: dict[str, list[dict]] = {}
+        for item in items:
+            by_category.setdefault(item["category"], []).append(item)
+        for category, group in by_category.items():
+            ordered = sorted(group, key=lambda i: (i["price"], i["id"]))
+            tiers = [i["payload"].get("tier") for i in ordered]
+            assert tiers == sorted(tiers), f"{scope}/{category}: {tiers}"
+            assert all(1 <= tier <= 4 for tier in tiers)
+            if len(group) >= 4:
+                assert set(tiers) == {1, 2, 3, 4}, f"{scope}/{category}: {set(tiers)}"
+
+
 def test_run_credits_coins(client, registered_user, db_session):
     run_id = str(uuid4())
     response = client.post("/runs", json={
