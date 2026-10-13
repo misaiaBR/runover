@@ -244,16 +244,8 @@ class FrameFamilyPainter extends CustomPainter {
     );
   }
 
-  Color _edgeColor(Color fallback) {
-    final edge = _payload['edge'];
-    if (edge is! String) return fallback.withValues(alpha: 0.8);
-    final clean = edge.replaceAll('#', '');
-    final value = int.tryParse(
-      clean.length == 6 ? 'FF$clean' : clean,
-      radix: 16,
-    );
-    return value == null ? fallback.withValues(alpha: 0.8) : Color(value);
-  }
+  Color _edgeColor(Color fallback) =>
+      cosmeticHexColor(_payload['edge']) ?? fallback.withValues(alpha: 0.8);
 
   /// Borda monocromática finíssima. É a família que menos cobre o rosto: um
   /// traço de 1 ou 2 px na cor do item, e pulso quando o payload pede — o

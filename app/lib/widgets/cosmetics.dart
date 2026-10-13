@@ -30,14 +30,23 @@ String cosmeticHint(String category) => switch (category) {
   _ => 'Cosmético do seu perfil.',
 };
 
-Color _hex(String hex) {
-  final clean = hex.replaceAll('#', '');
-  final value = int.parse(
+/// Um hex do catálogo (`#RRGGBB`) como `Color`, tolerante.
+///
+/// É o único lugar que converte hex de payload: as cores da moldura, a `edge`
+/// do vidro e o `tint` do avatar saem todos daqui. Valor fora do formato devolve
+/// null para quem chama escolher a própria fallback — estourar no meio da
+/// pintura deixaria a vitrine em tela branca por causa de um item mal escrito.
+Color? cosmeticHexColor(Object? value) {
+  if (value is! String) return null;
+  final clean = value.replaceAll('#', '');
+  final parsed = int.tryParse(
     clean.length == 6 ? 'FF$clean' : clean,
     radix: 16,
   );
-  return Color(value);
+  return parsed == null ? null : Color(parsed);
 }
+
+Color _hex(String hex) => cosmeticHexColor(hex) ?? const Color(0xFFFFC93C);
 
 /// As cores declaradas no payload, na ordem em que o catálogo as pôs.
 ///
