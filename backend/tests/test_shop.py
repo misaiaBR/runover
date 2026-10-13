@@ -3,7 +3,15 @@ from uuid import uuid4
 
 from app.models import CoinTransaction, UserItem
 from app.services import coins
-from app.services.shop import CATALOG, get_item
+from app.services.shop import (
+    CATALOG,
+    EFFECT_KINDS,
+    FRAME_STYLES,
+    PLATE_STYLES,
+    SCOPES,
+    _VOCABULARIES,
+    get_item,
+)
 
 
 def _track(num_points=70, offset_minutes=0):
@@ -43,12 +51,116 @@ def test_catalog_lists_all_categories(client):
     assert {"avatar", "frame", "effect", "banner", "name_style", "emoticon"} <= categories
 
 
+def test_each_shop_lists_only_its_own_scope(client):
+    """As três lojas são independentes, e juntas são o catálogo inteiro.
+
+    O Mercado pede `scope=user`, a Loja da equipe `scope=team`, o Passe
+    `scope=pass`. Item de outro escopo na lista é vitrine mentirosa: o toque
+    chega no servidor e a compra recusa. E item que não aparece em escopo
+    nenhum é item que não existe para ninguém.
+    """
+    ids_by_scope: dict[str, set[str]] = {}
+    for scope in SCOPES:
+        items = client.get("/shop/catalog", params={"scope": scope}).json()
+        assert items, scope
+        assert {item["scope"] for item in items} == {scope}
+        ids_by_scope[scope] = {item["id"] for item in items}
+
+    scopes = list(SCOPES)
+    for index, left in enumerate(scopes):
+        for right in scopes[index + 1:]:
+            assert not (ids_by_scope[left] & ids_by_scope[right]), (left, right)
+    assert set().union(*ids_by_scope.values()) == {item["id"] for item in CATALOG}
+
+
+def test_catalog_rejects_an_unknown_scope(client):
+    response = client.get("/shop/catalog", params={"scope": "equipe"})
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Escopo inválido."
+
+
 def test_everything_is_animated(client):
     for scope in (None, "user", "team"):
         params = {} if scope is None else {"scope": scope}
         items = client.get("/shop/catalog", params=params).json()
         assert items
         assert all(i["payload"].get("animated") is True for i in items)
+
+
+# Chaves que não mudam o desenho: a política de "tudo animado", o degrau da
+# escada de animação e a coleção da vitrine. O resto do payload é o que a loja
+# mostra — e é isso que não pode se repetir.
+_NOT_VISUAL = {"animated", "tier", "collection"}
+
+
+def _look(item):
+    """O que o app desenha do payload — dois itens com o mesmo `look` são o
+    mesmo item repetido na vitrine, mesmo com id e nome diferentes."""
+    return tuple(sorted(
+        (key, str(value)) for key, value in item["payload"].items()
+        if key not in _NOT_VISUAL
+    ))
+
+
+def test_no_two_items_look_the_same(client):
+    """A loja se mostra uma categoria de cada vez, em um escopo só."""
+    for scope in ("user", "team", "pass"):
+        items = client.get("/shop/catalog", params={"scope": scope}).json()
+        assert items
+        seen = {}
+        for item in items:
+            key = (item["category"], _look(item))
+            assert key not in seen, (
+                f"{scope}/{key[0]}: {seen.get(key)!r} e {item['name']!r} "
+                "desenham a mesma coisa"
+            )
+            seen[key] = item["name"]
+
+
+def test_every_visual_family_is_on_the_shelf(client):
+    """O vocabulário inteiro chega à vitrine pessoal.
+
+    Não basta o catálogo conhecer dezenove efeitos: se a loja só mostra faíscas
+    e chamas, a variedade é da tabela e não da prateleira.
+    """
+    items = client.get("/shop/catalog", params={"scope": "user"}).json()
+    kinds = {i["payload"]["kind"] for i in items if i["category"] == "effect"}
+    assert kinds == set(EFFECT_KINDS)
+    styles = {i["payload"].get("style") for i in items if i["category"] == "frame"}
+    assert styles >= set(FRAME_STYLES)
+    plates = {i["payload"].get("plate") for i in items if i["category"] == "banner"}
+    assert plates >= set(PLATE_STYLES)
+
+
+def test_no_item_announces_an_unknown_renderer(client):
+    """Todo renderizador nomeado num payload existe na tabela do serviço.
+
+    É a mesma checagem do boot, vista pela API: um `kind` ou `style` fora da
+    lista seria um item que a loja anuncia e o app não sabe desenhar.
+    """
+    for item in client.get("/shop/catalog").json():
+        for key, value in item["payload"].items():
+            allowed = _VOCABULARIES.get((item["category"], key))
+            if allowed is None or not isinstance(value, str):
+                continue
+            assert value in allowed, f"{item['id']}: {item['category']}.{key}={value!r}"
+
+
+def test_animation_tier_follows_the_price(client):
+    """Quanto mais alto o tipo, mais animação: dentro da mesma categoria e
+    escopo, o `tier` nunca diminui quando o preço sobe."""
+    for scope in ("user", "team"):
+        items = client.get("/shop/catalog", params={"scope": scope}).json()
+        by_category: dict[str, list[dict]] = {}
+        for item in items:
+            by_category.setdefault(item["category"], []).append(item)
+        for category, group in by_category.items():
+            ordered = sorted(group, key=lambda i: (i["price"], i["id"]))
+            tiers = [i["payload"].get("tier") for i in ordered]
+            assert tiers == sorted(tiers), f"{scope}/{category}: {tiers}"
+            assert all(1 <= tier <= 4 for tier in tiers)
+            if len(group) >= 4:
+                assert set(tiers) == {1, 2, 3, 4}, f"{scope}/{category}: {set(tiers)}"
 
 
 def test_run_credits_coins(client, registered_user, db_session):

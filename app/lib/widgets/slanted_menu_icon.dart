@@ -24,12 +24,12 @@ class SlantedMenuIcon extends StatelessWidget {
   }
 }
 
-/// O botão do menu lateral, no canto de cima de qualquer tela da casca.
+/// O botão do menu lateral, no canto de cima da home e do perfil.
 ///
-/// É um widget só porque o gesto é um só: a home, o painel do ranking e as
-/// demais telas abrem todas o mesmo `endDrawer`. Sem [onPressed] não há menu a
-/// abrir — a tela desenhada fora da casca (teste, rota empilhada) fica sem o
-/// botão, em vez de ganhar um ícone decorativo.
+/// É um widget só porque o gesto é um só: as duas telas abrem o mesmo
+/// `endDrawer` da casca. Sem [onPressed] não há menu a abrir — a tela desenhada
+/// fora da casca (teste, rota empilhada) fica sem o botão, em vez de ganhar um
+/// ícone decorativo.
 class MenuBarButton extends StatelessWidget {
   const MenuBarButton({super.key, this.onPressed});
 

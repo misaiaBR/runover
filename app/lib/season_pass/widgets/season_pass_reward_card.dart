@@ -205,7 +205,11 @@ class SeasonPassRewardCard extends StatelessWidget {
     final s = metrics.scale;
     final opacity = _sealed || state == RewardState.claimed ? 0.72 : 1.0;
     final child = switch (reward.item) {
-      final item when item != null => ShopPreview(item: item, scale: 0.52 * s),
+      final item when item != null => ShopPreview(
+        item: item,
+        scale: 0.52 * s,
+        onDarkSurface: true,
+      ),
       _ when reward.coins > 0 => SeasonPassCoinStack(
         coins: reward.coins,
         size: 58 * s,

@@ -23,7 +23,15 @@ MockClient _shopClient(
   return MockClient((request) async {
     final path = request.url.path;
     if (request.method == 'GET' && path == '/shop/catalog') {
-      return http.Response(jsonEncode(catalog), 200);
+      // O servidor devolve só o escopo pedido. Sem este filtro o teste não
+      // enxerga vazamento: a tela que pede o catálogo inteiro recebe tudo.
+      final scope = request.url.queryParameters['scope'];
+      final items = scope == null
+          ? catalog
+          : catalog
+                .where((item) => (item['scope'] ?? 'user') == scope)
+                .toList();
+      return http.Response(jsonEncode(items), 200);
     }
     if (request.method == 'GET' && path == '/shop/inventory') {
       return http.Response(
@@ -90,7 +98,13 @@ Map<String, dynamic> _avatar(String id, String name, int price) => {
       'category': 'avatar',
       'name': name,
       'price': price,
-      'payload': {'asset': 'corredor', 'animated': false},
+      // Rosto vem da API de avatares com a seed do próprio item.
+      'payload': {
+        'generated': 'adventurer',
+        'seed': id,
+        'animated': false,
+        'tier': 1,
+      },
     };
 
 void main() {
@@ -218,6 +232,52 @@ void main() {
 
     // O preço aparece na faixa de destaque e no card da grade.
     expect(find.text('900'), findsNWidgets(2));
+    expect(tester.takeException(), isNull);
+  });
+
+  // São três lojas numa API só: pessoal, equipe e Passe. A vitrine do Mercado é
+  // a pessoal — item das outras aparece, o toque chega no servidor e a compra
+  // recusa. O filtro é o escopo da requisição, não a categoria do item.
+  testWidgets('o Mercado só oferece a loja pessoal', (tester) async {
+    await _pumpShop(tester, [
+      _avatar('avatar_corredor', 'Corredor', 50),
+      {
+        ..._avatar('avatar_bandeira', 'Bandeira da equipe', 900),
+        'scope': 'team',
+      },
+      {
+        ..._avatar('avatar_heroi', 'Herói da temporada', 1200),
+        'scope': 'pass',
+      },
+    ]);
+
+    expect(find.text('Corredor'), findsWidgets);
+    expect(find.text('Bandeira da equipe'), findsNothing);
+    expect(find.text('Herói da temporada'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  // O "Inclui:" do pacote resolve cada `grants` no catálogo. Um id que a loja
+  // pessoal não conhece fica de fora: id interno não se mostra na interface.
+  testWidgets('pacote não mostra id interno de item fora da loja', (
+    tester,
+  ) async {
+    await _pumpShop(tester, [
+      _avatar('avatar_corredor', 'Corredor', 50),
+      {
+        'id': 'bundle_pacote',
+        'category': 'bundle',
+        'name': 'Pacote do corredor',
+        'price': 300,
+        'payload': {
+          'animated': true,
+          'grants': ['avatar_corredor', 'team_avatar_bandeira'],
+        },
+      },
+    ]);
+
+    expect(find.textContaining('Inclui: Corredor'), findsWidgets);
+    expect(find.textContaining('team_avatar_bandeira'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }

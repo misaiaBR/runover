@@ -38,7 +38,9 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   bool _badgeBusy = false;
 
   /// O gesto de abrir o menu lateral. A casca é dona do `endDrawer`, então é
-  /// ela quem o oferece às telas que hospeda — e só a Equipe não pede o botão.
+  /// ela quem o oferece — e ele só vai para as duas telas onde a pessoa chega
+  /// sem outro caminho para o menu: a home (HUD) e o perfil. Corridas, Ranking
+  /// e Equipe ficam sem o botão; ali quem navega é a barra de baixo.
   void _openMenu() => _scaffoldKey.currentState?.openEndDrawer();
 
   late final _screens = [
@@ -47,8 +49,8 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       menuKey: _menuKey,
       startKey: _startKey,
     ),
-    RunsScreen(onOpenMenu: _openMenu),
-    RankingScreen(onOpenMenu: _openMenu),
+    const RunsScreen(),
+    const RankingScreen(),
     const TeamsScreen(),
     ProfileScreen(onOpenMenu: _openMenu, onOpenTab: _select),
   ];

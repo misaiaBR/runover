@@ -9,7 +9,9 @@ import '../format.dart';
 import '../services/api_client.dart';
 import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
+import '../widgets/banner_plate.dart';
 import '../widgets/cosmetics.dart';
+import '../widgets/emoticon_pieces.dart';
 import '../widgets/game_nav.dart';
 import '../widgets/insignia.dart';
 import '../widgets/league_emblem.dart';
@@ -432,7 +434,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
           profile.equippedNameStyle,
         );
         final effect = findItem(catalog ?? const [], profile.equippedEffect);
-        final gradient = bannerGradient(banner);
+        // O mural resolve os glifos equipados contra o catálogo: o servidor
+        // guarda uma lista plana de glifos, sem pacote, e é `emoticon_pieces`
+        // que sabe qual item apresenta cada um e qual deles manda no
+        // distintivo do avatar.
+        final mural = emoticonMural(
+          catalog ?? const [],
+          profile.equippedEmoticons,
+        );
+        final badge = emoticonBadgeFor(mural.badgePack);
         final displayName = profile.fullName.trim().isEmpty
             ? profile.username
             : profile.fullName;
@@ -470,13 +480,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           child: Stack(
                             clipBehavior: Clip.none,
                             children: [
-                              Container(
+                              SizedBox(
                                 height: 110,
-                                decoration: BoxDecoration(
-                                  gradient: gradient,
-                                  color: gradient == null
-                                      ? scheme.surfaceContainerHighest
-                                      : null,
+                                child: BannerPlate(
+                                  banner: banner,
+                                  fallbackColor: scheme.surfaceContainerHighest,
                                 ),
                               ),
                               Positioned(
@@ -505,7 +513,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                               image: profileAvatarImage(
                                                 profile.photoUrl,
                                                 avatarItem,
-                                                seed: profile.username,
                                               ),
                                               fallbackLetter:
                                                   profile.username.isEmpty
@@ -513,12 +520,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                                   : profile.username[0],
                                               frame: frame,
                                               avatarItem: avatarItem,
+                                              // Os números que o perfil tem: o
+                                              // XP até o próximo nível.
+                                              gauges: [
+                                                FrameGauge(
+                                                  GaugeMeasure.xp,
+                                                  profile.levelProgress,
+                                                ),
+                                              ],
                                             ),
-                                            // O ponto verde é o sinal vivo que o
-                                            // servidor calcula (batimento + GPS),
-                                            // não o estado escolhido no pill.
+                                            // O distintivo do pacote e o ponto
+                                            // verde dividem a beira de baixo,
+                                            // lado a lado: nenhum é suprimido.
+                                            // O ponto é o sinal vivo que o
+                                            // servidor calcula (batimento +
+                                            // GPS), não o estado escolhido.
+                                            if (badge != null)
+                                              Positioned(
+                                                right: 2,
+                                                bottom: 2,
+                                                child: badge,
+                                              ),
                                             Positioned(
-                                              right: 2,
+                                              right: presenceRightOffset(
+                                                badge: badge,
+                                              ),
                                               bottom: 2,
                                               child: PresenceDot(
                                                 visible: profile.online,
@@ -619,10 +645,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   spacing: 6,
                                   runSpacing: 6,
                                   children: [
-                                    for (final e in profile.equippedEmoticons)
-                                      Text(
-                                        e,
-                                        style: const TextStyle(fontSize: 20),
+                                    for (final entry in mural.entries)
+                                      EmoticonPiece(
+                                        glyph: entry.glyph,
+                                        pack: entry.pack,
                                       ),
                                   ],
                                 ),

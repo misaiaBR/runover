@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../format.dart';
+import '../../widgets/runover_ui.dart';
 import '../palette.dart';
 import '../trail_metrics.dart';
 import 'season_pass_hex_node.dart';
@@ -32,6 +33,9 @@ class SeasonPassLevelColumn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // O nó ainda não alcançado e o trilho apagado são superfície do tema: no
+    // claro eles vêm do cartão claro, no escuro do roxo de sempre.
+    final pal = Pal.of(context);
     final reached = level <= currentLevel;
     final done = level < currentLevel;
     final current = level == currentLevel;
@@ -63,13 +67,13 @@ class SeasonPassLevelColumn extends StatelessWidget {
                     Expanded(
                       child: Container(
                         height: 4,
-                        color: reached ? trailReached : trailNodeIdle,
+                        color: reached ? trailReached : pal.track,
                       ),
                     ),
                     Expanded(
                       child: Container(
                         height: 4,
-                        color: done ? trailReached : trailNodeIdle,
+                        color: done ? trailReached : pal.track,
                       ),
                     ),
                   ],
@@ -86,7 +90,7 @@ class SeasonPassLevelColumn extends StatelessWidget {
                 _Hexagon(
                   color: current
                       ? trailAccent
-                      : (reached ? trailReached : trailNodeIdle),
+                      : (reached ? trailReached : pal.chip),
                   width: nodeWidth,
                   height: nodeHeight,
                   child: Text(
@@ -97,9 +101,7 @@ class SeasonPassLevelColumn extends StatelessWidget {
                       fontWeight: FontWeight.w800,
                       color: current
                           ? trailAccentInk
-                          : (reached
-                                ? trailReachedInk
-                                : trailNodeInk),
+                          : (reached ? trailReachedInk : pal.muted),
                     ),
                   ),
                 ),

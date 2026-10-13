@@ -29,11 +29,7 @@ import 'tracking_screen.dart';
 const double _emptyModeMaxWidth = 420;
 
 class RunsScreen extends StatefulWidget {
-  const RunsScreen({super.key, this.onOpenMenu});
-
-  /// Abre o menu lateral da casca, no canto do cabeçalho. Fora da casca o
-  /// callback vem nulo e o botão não aparece.
-  final VoidCallback? onOpenMenu;
+  const RunsScreen({super.key});
 
   @override
   State<RunsScreen> createState() => _RunsScreenState();
@@ -587,17 +583,11 @@ class _RunsScreenState extends State<RunsScreen> {
             children: [
               GradientBar(
                 title: 'Corridas',
-                // Empurrada por cima da casca — é como o atalho "Minhas
-                // corridas" do perfil abria esta tela antes de virar troca de
-                // aba — não há barra embaixo nem menu para abrir: a seta é a
-                // única saída, e sem ela a tela seria um beco sem saída.
+                // O cabeçalho de Corridas não tem porta de menu: quem navega
+                // daqui para fora é a barra de baixo. A seta só existe quando a
+                // tela vem empurrada por cima da casca — ali não há barra nem
+                // menu, e sem ela a tela seria um beco sem saída.
                 leading: pushed ? const BackBarButton() : null,
-                // Só a porta do menu, no canto direito — como no HUD da home,
-                // é daquele lado que o `endDrawer` cai. Atualizar não tem
-                // botão aqui: puxar a lista recarrega as duas abas, o filtro de
-                // período e o resgate de um desafio também, e a falha tem o
-                // "Tentar novamente" do banner.
-                trailing: MenuBarButton(onPressed: widget.onOpenMenu),
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 14, 20, 4),

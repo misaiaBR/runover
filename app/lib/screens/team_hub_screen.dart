@@ -6,8 +6,8 @@ import 'package:provider/provider.dart';
 import '../format.dart';
 import '../models.dart';
 import '../services/api_client.dart';
-import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
+import '../widgets/banner_plate.dart';
 import '../widgets/centered_content.dart';
 import '../widgets/cosmetics.dart';
 import '../widgets/level_badge.dart';
@@ -316,34 +316,45 @@ class _TeamHeader extends StatelessWidget {
     final banner = findItem(catalog, team.equippedBanner);
     final nameStyle = findItem(catalog, team.equippedNameStyle);
     final effect = findItem(catalog, team.equippedEffect);
-    final avatarAsset = galleryAvatarAsset(
-      findItem(catalog, team.equippedAvatar),
-    );
+    final avatarItem = findItem(catalog, team.equippedAvatar);
     final gradient = bannerGradient(banner);
-    ImageProvider? image;
-    if (team.photoUrl?.isNotEmpty == true) {
-      image = profileImageProvider(team.photoUrl);
-    } else if (avatarAsset != null) {
-      image = AssetImage(avatarAsset);
-    }
+    // O rosto do emblema é o do item equipado (seed = id do item); a foto da
+    // equipe só aparece quando não há avatar da loja.
+    final image = profileAvatarImage(team.photoUrl, avatarItem);
     return Stack(
       children: [
+        // A faixa é o fundo do cartão: o gradiente do catálogo e, quando o item
+        // declara `plate`, a placa desenhada por cima dele. Fica como camada
+        // abaixo do conteúdo — é decoração, nunca um alvo de toque.
+        Positioned.fill(
+          child: BannerPlate(
+            banner: banner,
+            borderRadius: BorderRadius.circular(16),
+            fallbackColor: colors.surfaceContainer,
+          ),
+        ),
         Container(
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            gradient: gradient,
-            color: gradient == null ? colors.surfaceContainer : null,
-          ),
           child: Row(
             children: [
               FramedAvatar(
                 radius: 28,
                 image: image,
+                avatarItem: avatarItem,
                 fallbackLetter: team.name.isNotEmpty
                     ? team.name[0].toUpperCase()
                     : '?',
                 frame: frame,
+                // Os números que a equipe tem de verdade: a progressão do
+                // nível e as zonas conquistadas sobre a capacidade da base.
+                gauges: [
+                  FrameGauge(GaugeMeasure.xp, team.levelProgress),
+                  if (team.zoneCapacity > 0)
+                    FrameGauge(
+                      GaugeMeasure.territorio,
+                      team.territories.length / team.zoneCapacity,
+                    ),
+                ],
               ),
               const SizedBox(width: 12),
               Expanded(

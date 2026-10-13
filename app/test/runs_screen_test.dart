@@ -90,9 +90,6 @@ void main() {
     // Cada abertura num mesmo teste precisa de chave própria: sem ela o
     // `pumpWidget` reaproveita o State, a aba escolhida e a carga anterior.
     Key? screenKey,
-    /// O que a casca oferece a esta aba: o gesto de abrir o menu lateral. Nulo
-    /// é a tela desenhada sozinha, sem `endDrawer` para abrir.
-    VoidCallback? onOpenMenu,
     /// Desenha a tela empurrada por cima de outra rota, como o atalho do perfil
     /// a desenhava antes de virar troca de aba: ali não há menu, e a seta de
     /// voltar é a única saída.
@@ -211,7 +208,7 @@ void main() {
                     ),
                   ),
                 )
-              : RunsScreen(key: screenKey, onOpenMenu: onOpenMenu),
+              : RunsScreen(key: screenKey),
         ),
       ),
     );
@@ -638,24 +635,16 @@ void main() {
     }
   });
 
-  // Corridas vive na casca, e é ela que é dona do `endDrawer`: o botão do menu
-  // tem de estar no cabeçalho e o toque tem de chegar ao gesto da casca. O
-  // atualizar saiu de lá — recarregar é puxar a lista, e o resto do cabeçalho é
-  // do menu.
-  testWidgets('corridas tem o botão do menu lateral no cabeçalho', (
+  // Corridas não é porta de menu: o canto de cima fica limpo e quem navega
+  // para fora da aba é a barra de baixo. Atualizar também não tem botão aqui —
+  // puxar a lista recarrega as duas abas, o filtro de período e o resgate de um
+  // desafio também, e a falha tem o "Tentar novamente" do banner.
+  testWidgets('corridas não tem botão de menu nem de atualizar no cabeçalho', (
     tester,
   ) async {
-    var opened = 0;
-    await openScreen(
-      tester,
-      const Size(390, 844),
-      onOpenMenu: () => opened++,
-    );
-    expect(find.byTooltip('Menu'), findsOneWidget);
+    await openScreen(tester, const Size(390, 844));
+    expect(find.byTooltip('Menu'), findsNothing);
     expect(find.byIcon(Icons.refresh), findsNothing);
-    await tester.tap(find.byTooltip('Menu'));
-    await tester.pump();
-    expect(opened, 1);
   });
   // Sem o botão de atualizar, recarregar no desktop é puxar a lista com o
   // rato — e o rato não arrasta lista nenhuma por padrão.
@@ -686,13 +675,8 @@ void main() {
   );
 
   testWidgets('a Corridas aba da casca não tem seta de voltar', (tester) async {
-    await openScreen(
-      tester,
-      const Size(390, 844),
-      onOpenMenu: () {},
-    );
-    // Aqui quem navega é a barra de baixo e o menu: a seta seria decorativa.
+    await openScreen(tester, const Size(390, 844));
+    // Aqui quem navega é a barra de baixo: a seta seria decorativa.
     expect(find.byTooltip('Voltar'), findsNothing);
-    expect(find.byTooltip('Menu'), findsOneWidget);
   });
 }

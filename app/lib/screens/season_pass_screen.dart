@@ -17,6 +17,7 @@ import '../season_pass/widgets/season_pass_progress_bar.dart';
 import '../season_pass/widgets/season_pass_reward_card.dart';
 import '../services/api_client.dart';
 import '../state/app_state.dart';
+import '../widgets/runover_ui.dart';
 import 'pass_screen.dart';
 
 /// A recompensa aberta no painel de destaque.
@@ -259,14 +260,14 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
   Widget build(BuildContext context) {
     if (_controlled) {
       return Scaffold(
-        backgroundColor: trailBoard,
-        appBar: _appBar(),
+        backgroundColor: Pal.of(context).panel,
+        appBar: _appBar(context),
         body: _layout(context, widget.season!, _claimed),
       );
     }
     return Scaffold(
-      backgroundColor: trailBoard,
-      appBar: _appBar(),
+      backgroundColor: Pal.of(context).panel,
+      appBar: _appBar(context),
       body: FutureBuilder<Season>(
         future: _future,
         builder: (context, snapshot) {
@@ -279,20 +280,21 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
           // de estourar na busca do nível em destaque.
           final season = snapshot.data;
           if (snapshot.hasError || season == null || season.levels.isEmpty) {
+            final pal = Pal.of(context);
             return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Text(
+                  Text(
                     'Não foi possível carregar o passe.',
-                    style: TextStyle(color: Colors.white),
+                    style: TextStyle(color: pal.heading),
                   ),
                   const SizedBox(height: 12),
                   OutlinedButton.icon(
                     onPressed: _reload,
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      side: const BorderSide(color: Colors.white54),
+                      foregroundColor: pal.heading,
+                      side: BorderSide(color: pal.border),
                     ),
                     icon: const Icon(Icons.refresh),
                     label: const Text('Tentar novamente'),
@@ -311,15 +313,19 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
     );
   }
 
-  /// A tela é escura nos dois temas — é a regra do [trailBoard] — então a barra
-  /// veste o mesmo fundo em vez do preto do tema, para não abrir faixa.
-  AppBar _appBar() => AppBar(
-    title: const Text('Passe de Temporada'),
-    backgroundColor: trailBoard,
-    foregroundColor: Colors.white,
-    elevation: 0,
-    scrolledUnderElevation: 0,
-  );
+  /// A barra veste o painel do tema — o mesmo fundo do corpo da tela — para não
+  /// abrir faixa entre o cabeçalho e a trilha. No escuro é o roxo de sempre; no
+  /// claro ela acompanha o resto do aplicativo.
+  AppBar _appBar(BuildContext context) {
+    final pal = Pal.of(context);
+    return AppBar(
+      title: const Text('Passe de Temporada'),
+      backgroundColor: pal.panel,
+      foregroundColor: pal.heading,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+    );
+  }
 
   String _remaining(DateTime endsAt) {
     final left = endsAt.difference(DateTime.now());
@@ -538,8 +544,9 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
 
   /// A trilha: rótulos fixos à esquerda + níveis em rolagem horizontal.
   ///
-  /// Não desenha caixa própria — a tela inteira já é o roxo da temporada, então
-  /// sobra só o respiro vertical que alinha as duas faixas.
+  /// Não desenha caixa própria — a tela inteira já é o painel do passe, no tema
+  /// que o jogador usa, então sobra só o respiro vertical que alinha as duas
+  /// faixas.
   Widget _trail(
     BuildContext context,
     Season season,
@@ -590,7 +597,7 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
                         metrics,
                       ),
                     ),
-                  _trailEnd(metrics),
+                  _trailEnd(context, metrics),
                 ],
               ),
             ),
@@ -632,7 +639,8 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
   /// O nó fica exatamente sobre a linha da trilha (por isso o [Stack] em vez
   /// de uma coluna centralizada: o rótulo embaixo empurraria o nó para cima)
   /// e um pedaço de trilho liga ele ao último nível.
-  Widget _trailEnd(TrailMetrics metrics) {
+  Widget _trailEnd(BuildContext context, TrailMetrics metrics) {
+    final pal = Pal.of(context);
     final nodeSize = 34 * metrics.scale;
     return SizedBox(
       width: metrics.cardWidth * 1.4,
@@ -644,7 +652,7 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
             alignment: Alignment.centerLeft,
             child: SizedBox(
               width: metrics.cardWidth * 0.55,
-              child: Container(height: 4, color: trailNodeIdle),
+              child: Container(height: 4, color: pal.track),
             ),
           ),
           SeasonPassHexNode(
@@ -665,7 +673,7 @@ class _SeasonPassScreenState extends State<SeasonPassScreen>
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 11 * metrics.scale,
-                color: trailNodeInk,
+                color: pal.muted,
               ),
             ),
           ),

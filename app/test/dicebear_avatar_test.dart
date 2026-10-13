@@ -44,33 +44,60 @@ void main() {
     }
   });
 
-  test('avatar gerado vira NetworkImage com a seed do dono', () {
+  test('avatar da API usa a seed do item, não a de quem equipou', () {
     final provider = profileAvatarImage(
       null,
-      avatarItem('avatar_gerado_bottts', {'generated': 'bottts'}),
-      seed: 'misaia',
+      avatarItem('avatar_gerado_bottts', {
+        'generated': 'bottts',
+        'seed': 'avatar_gerado_bottts',
+      }),
     );
     expect(provider, isA<NetworkImage>());
     expect(
       (provider as NetworkImage).url,
-      'https://api.dicebear.com/7.x/bottts/png?seed=misaia',
+      'https://api.dicebear.com/7.x/bottts/png?seed=avatar_gerado_bottts',
     );
   });
 
-  test('asset da galeria continua prioritário sobre a foto', () {
+  test('seed ausente no payload cai no id do item', () {
+    expect(avatarSeed(avatarItem('avatar_corredor', {'generated': 'thumbs'})),
+        'avatar_corredor');
+    expect(
+      avatarSeed(
+        avatarItem('avatar_corredor', {'seed': '', 'generated': 'thumbs'}),
+      ),
+      'avatar_corredor',
+    );
+    expect(
+      avatarSeed(
+        avatarItem('avatar_corredor', {
+          'generated': 'thumbs',
+          'seed': 'rosto_do_item',
+        }),
+      ),
+      'rosto_do_item',
+    );
+  });
+
+  test('rosto do item tem prioridade sobre a foto enviada', () {
     final provider = profileAvatarImage(
       'https://example.com/foto.jpg',
-      avatarItem('avatar_coroa', {'asset': 'coroa'}),
-      seed: 'misaia',
+      avatarItem('avatar_coroa', {'generated': 'personas'}),
     );
-    expect(provider, isA<AssetImage>());
+    expect(provider, isA<NetworkImage>());
+    expect(
+      (provider as NetworkImage).url,
+      contains('seed=avatar_coroa'),
+    );
   });
 
   test('sem item, a foto passa direto; sem nada, null', () {
-    expect(
-      profileAvatarImage('https://example.com/foto.jpg', null),
-      isA<NetworkImage>(),
+    final provider = profileAvatarImage(
+      'https://example.com/foto.jpg',
+      null,
     );
+    expect(provider, isA<NetworkImage>());
+    expect((provider as NetworkImage).url, 'https://example.com/foto.jpg');
     expect(profileAvatarImage(null, null), isNull);
   });
 
@@ -79,9 +106,13 @@ void main() {
       profileAvatarImage(
         null,
         avatarItem('x', {'generated': 'nao-existe'}),
-        seed: 'misaia',
       ),
       isNull,
     );
+    final fallback = profileAvatarImage(
+      'https://example.com/foto.jpg',
+      avatarItem('x', {'generated': 'nao-existe'}),
+    );
+    expect((fallback as NetworkImage).url, 'https://example.com/foto.jpg');
   });
 }

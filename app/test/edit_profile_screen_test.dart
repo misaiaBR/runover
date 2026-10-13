@@ -680,6 +680,9 @@ void main() {
     final client = MockClient((request) async {
       final path = request.url.path;
       if (request.method == 'GET' && path == '/shop/catalog') {
+        // A "Escolha um avatar" é a loja pessoal: emblema da equipe e item do
+        // Passe não se compram com a carteira do jogador.
+        expect(request.url.queryParameters['scope'], 'user');
         return http.Response(
           jsonEncode([
             {
@@ -687,14 +690,27 @@ void main() {
               'category': 'avatar',
               'name': 'Corredor',
               'price': 50,
-              'payload': {'asset': 'corredor', 'animated': false},
+              // O catálogo real não tem mais PNG próprio: o rosto vem da API
+              // de avatares e a `seed` é o id, para a loja e o perfil desenharem
+              // a mesma figura.
+              'payload': {
+                'generated': 'adventurer',
+                'seed': 'avatar_corredor',
+                'animated': false,
+                'tier': 1,
+              },
             },
             {
               'id': 'avatar_gerado_adventurer',
               'category': 'avatar',
               'name': 'Gerado aventureiro',
               'price': 250,
-              'payload': {'generated': 'adventurer', 'animated': false},
+              'payload': {
+                'generated': 'adventurer',
+                'seed': 'avatar_gerado_adventurer',
+                'animated': false,
+                'tier': 2,
+              },
             },
           ]),
           200,
@@ -778,6 +794,23 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('50 🪙'), findsOneWidget);
+
+    // O rosto é o do item (seed = id), não o de quem está escolhendo: a folha,
+    // a vitrine e o perfil de quem equipou desenham a mesma figura.
+    final faces = tester
+        .widgetList<Image>(find.byType(Image))
+        .map((tile) => tile.image)
+        .whereType<NetworkImage>()
+        .map((image) => image.url)
+        .toList();
+    expect(
+      faces,
+      containsAll(<String>[
+        'https://api.dicebear.com/7.x/adventurer/png?seed=avatar_corredor',
+        'https://api.dicebear.com/7.x/adventurer/png'
+            '?seed=avatar_gerado_adventurer',
+      ]),
+    );
 
     await tester.tap(find.byKey(const Key('preset-avatar-Corredor')));
     await tester.pumpAndSettle();

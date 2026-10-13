@@ -62,7 +62,12 @@ const _catalogJson = [
     'category': 'avatar',
     'name': 'Corredor',
     'price': 50,
-    'payload': {'asset': 'corredor', 'animated': false},
+    'payload': {
+      'generated': 'adventurer',
+      'seed': 'avatar_corredor',
+      'animated': false,
+      'tier': 1,
+    },
   },
 ];
 
@@ -111,7 +116,12 @@ void main() {
         'category': 'avatar',
         'name': 'Corredor',
         'price': 50,
-        'payload': {'asset': 'corredor', 'animated': false},
+        'payload': {
+      'generated': 'adventurer',
+      'seed': 'avatar_corredor',
+      'animated': false,
+      'tier': 1,
+    },
       }),
     ];
 

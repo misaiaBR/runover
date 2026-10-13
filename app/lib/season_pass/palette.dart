@@ -1,20 +1,20 @@
 import 'package:flutter/material.dart';
 
-/// Paleta fixa do Passe de Temporada.
+/// Paleta do Passe de Temporada.
 ///
-/// Convenção já usada nas telas do passe (`PassSummary` em `pass_screen.dart`):
-/// o tema do app não tem dourado nem as cores das faixas na paleta, então o
-/// passe traz os próprios valores — iguais nas duas claridades, porque cada
-/// faixa carrega o próprio fundo saturado e o texto branco sobre ele continua
-/// legível no tema claro e no escuro.
+/// Duas metades, e a linha que as separa é uma só:
 ///
-/// Fundo da tela do passe: o mesmo roxo-escuro em qualquer tema. As faixas
-/// coloridas só fazem sentido sobre um escuro próprio — sobre o branco do
-/// tema claro a trilha inteira viraria mancha.
-const trailBoard = Color(0xFF14102E);
-
-/// Faixa do trilho, atrás dos nós.
-const trailRail = Color(0xFF0F0B26);
+/// - **Superfície e tinta** (fundo da tela, barra, nó apagado, texto do nó)
+///   vêm do tema — `Pal.of(context).panel`, `.chip`, `.muted`, `.track`. O
+///   passe não tem mais roxo fixo: no escuro ele continua desenhado sobre o
+///   mesmo `#14102E` de sempre, e no claro ele abre sobre o painel claro do
+///   app em vez de ficar preso no modo escuro.
+/// - **As faixas** (grátis, passe, cabeçalho da temporada, dourado do resgate,
+///   verde do concluído) carregam o próprio fundo saturado e o texto branco
+///   sobre ele, então continuam fixas nas duas claridades — é o que faz o
+///   cartão ler "prêmio" em qualquer tema.
+///
+/// Faixa do trilho, atrás dos nós: use `Pal.of(context).track`.
 
 // Faixa grátis — laranja de rota, a cor do app.
 const trailFreeTop = Color(0xFFFFA040);
@@ -23,10 +23,6 @@ const trailFreeBottom = Color(0xFFF2552C);
 // Faixa do passe — violeta, a cor do premium.
 const trailPassTop = Color(0xFF5A42D4);
 const trailPassBottom = Color(0xFF2A1F78);
-
-/// Nó da trilha ainda não alcançado e o texto dentro dele.
-const trailNodeIdle = Color(0xFF2E2766);
-const trailNodeInk = Color(0xFFB9B2F0);
 
 /// Nó alcançado: verde-água do concluído (a barra de nível vai do tom cheio ao
 /// claro).
