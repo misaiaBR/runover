@@ -16,11 +16,43 @@ import 'profile_screen_test.dart' show profileData;
 const _teamId = 'team-1';
 const _teamPath = '/teams/$_teamId';
 
+/// Emblemas da loja da equipe que o servidor devolve no escopo `team`. Só o
+/// suficiente para a prévia achar o item equipado pelo id e desenhar o rosto da
+/// API — payload `generated` + `seed`, como no catálogo real.
+const teamEmblemCatalog = [
+  {
+    'id': 'team_avatar_estandarte',
+    'category': 'avatar',
+    'name': 'Estandarte da equipe',
+    'price': 4000,
+    'scope': 'team',
+    'payload': {
+      'generated': 'adventurer',
+      'seed': 'team_avatar_estandarte',
+      'tier': 2,
+    },
+  },
+  {
+    'id': 'team_avatar_coroa',
+    'category': 'avatar',
+    'name': 'Coroa da equipe',
+    'price': 9000,
+    'scope': 'team',
+    'payload': {
+      'generated': 'personas',
+      'seed': 'team_avatar_coroa',
+      'tier': 3,
+    },
+  },
+];
+
 /// JSON de `TeamDetail` com os padrões de uma equipe de três pessoas, onde
 /// `marina` (o perfil do teste) é a dona.
 Map<String, dynamic> teamSettingsJson({
   String name = 'RUNOVER',
   String? photoUrl,
+  String? equippedAvatar,
+  List<String> ownedEmblems = const [],
   bool owner = true,
   bool admin = true,
   int memberCount = 3,
@@ -35,6 +67,8 @@ Map<String, dynamic> teamSettingsJson({
   'id': _teamId,
   'name': name,
   'photo_url': photoUrl,
+  'equipped_avatar': equippedAvatar,
+  'owned_emblems': ownedEmblems,
   'creator_username': 'marina',
   'member_count': memberCount,
   'members':
@@ -61,15 +95,21 @@ Map<String, dynamic> teamSettingsJson({
 
 class TeamSettingsCalls {
   final List<String> requests = [];
+
+  /// Query string da última chamada do catálogo, para conferir o escopo pedido.
+  String catalogQuery = '';
   Map<String, dynamic>? lastPatch;
   Map<String, dynamic>? lastLeave;
+  Map<String, dynamic>? lastEquip;
 
   bool called(String verbAndPath) => requests.contains(verbAndPath);
 }
 
 /// Abre a tela de configurações contra um `MockClient` que registra as chamadas
 /// e devolve a equipe informada (com o link de convite renovado quando o
-/// servidor é chamado para regenerar).
+/// servidor é chamado para regenerar). Atende também a Loja da equipe —
+/// catálogo de avatares, cofre, inventário, compra e equipamento — porque a
+/// tela lê o emblema equipado para desenhar a prévia.
 ///
 /// `failOn` faz falhar com 409 a chamada cujo `MÉTODO /caminho` contém o texto.
 /// `routed` abre a tela por dentro de um `Navigator`, como o painel faz: só
@@ -87,6 +127,20 @@ Future<TeamSettingsCalls> openTeamSettings(
   addTearDown(tester.view.resetDevicePixelRatio);
 
   final calls = TeamSettingsCalls();
+  // O que a equipe tem da loja: o inventário devolvido abaixo acompanha a última
+  // compra/equipamento, que é exatamente o que a prévia da tela relê depois.
+  final owned = <String>{
+    for (final id in (teamJson['owned_emblems'] as List?) ?? const []) '$id',
+  };
+  String? equipped = teamJson['equipped_avatar'] as String?;
+  Map<String, dynamic> inventory() => {
+    'owned': owned.toList(),
+    'equipped_avatar': equipped,
+    'equipped_frame': null,
+    'equipped_effect': null,
+    'equipped_banner': null,
+    'equipped_name_style': null,
+  };
   final api = ApiClient(
     client: MockClient((request) async {
       final method = request.method;
@@ -95,12 +149,38 @@ Future<TeamSettingsCalls> openTeamSettings(
       if (failOn != null && '$method $path'.contains(failOn)) {
         return http.Response(jsonEncode({'detail': 'Ação indisponível.'}), 409);
       }
+      if (method == 'GET' && path == '/shop/catalog') {
+        calls.catalogQuery = request.url.query;
+        return http.Response(jsonEncode(teamEmblemCatalog), 200);
+      }
+      if (method == 'GET' && path == '$_teamPath/inventory') {
+        return http.Response(jsonEncode(inventory()), 200);
+      }
+      if (method == 'GET' && path == '$_teamPath/wallet') {
+        return http.Response(
+          jsonEncode({
+            'balance': 20000,
+            'spent_points': 0,
+            'members_points': 20000,
+          }),
+          200,
+        );
+      }
+      if (method == 'POST' && path == '$_teamPath/purchase') {
+        owned.add('${jsonDecode(request.body)['item_id']}');
+        return http.Response(jsonEncode(inventory()), 200);
+      }
+      if (method == 'POST' && path == '$_teamPath/equip') {
+        final body = jsonDecode(request.body) as Map<String, dynamic>;
+        calls.lastEquip = body;
+        equipped = body['item_id'] as String?;
+        return http.Response(jsonEncode(inventory()), 200);
+      }
       if (method == 'PATCH' && path == _teamPath) {
         calls.lastPatch = jsonDecode(request.body) as Map<String, dynamic>;
         final saved = Map<String, dynamic>.from(teamJson);
         final body = calls.lastPatch!;
         if (body['name'] != null) saved['name'] = body['name'];
-        if (body['photo_url'] != null) saved['photo_url'] = body['photo_url'];
         return http.Response(jsonEncode(saved), 200);
       }
       if (path.endsWith('/invite/regenerate')) {
@@ -168,7 +248,7 @@ Future<TeamSettingsCalls> openTeamSettings(
 }
 
 /// A tela é uma `ListView`: itens de baixo só entram na árvore depois de rolar.
-/// A chave pega a lista da tela, não a faixa horizontal de avatares.
+/// A chave pega a lista da tela, não uma das listas internas.
 final _settingsList = find.byKey(const Key('team-settings-list'));
 
 Future<void> scrollTo(WidgetTester tester, String text) async {
@@ -286,7 +366,7 @@ void main() {
       'CONVITES',
       'PEDIDOS DE ENTRADA',
       'AVISOS DA EQUIPE',
-      'Foto da equipe',
+      'Escolher emblema na loja',
       'Salvar alterações',
       'Dissolver',
     ]) {

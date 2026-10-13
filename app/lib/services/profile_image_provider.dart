@@ -112,6 +112,11 @@ img.Image _resized(img.Image source, int side) {
 }
 
 /// Avatares prontos embutidos no app (gerados por tools/gen_preset_avatars.py).
+///
+/// A loja não desenha mais estes PNGs — o rosto de cada item vem da API de
+/// avatares. Eles ficam por duas razões: o cartão de equipe no painel sorteia um
+/// destes rostos quando a equipe não tem emblema comprado, e a folha de escolha
+/// usa o nome para achar o item histórico `avatar_<nome>` no catálogo.
 class PresetAvatar {
   const PresetAvatar(this.asset, this.label);
 
@@ -134,25 +139,9 @@ const presetAvatars = [
   PresetAvatar('assets/avatars/avatar_coroa.png', 'Coroa'),
 ];
 
-/// Carrega um avatar pronto como data URI válido para `photo_url`.
-/// Devolve null se o asset estiver ausente ou inválido.
-Future<String?> presetAvatarDataUri(String asset) async {
-  try {
-    final data = await rootBundle.load(asset);
-    final bytes = data.buffer.asUint8List(
-      data.offsetInBytes,
-      data.lengthInBytes,
-    );
-    final avatar = fitAvatarPhoto(bytes);
-    if (avatar == null) return null;
-    return 'data:${avatar.mimeType};base64,${base64Encode(avatar.bytes)}';
-  } catch (_) {
-    return null;
-  }
-}
-
 /// Avatares gerados via DiceBear (gratuito, sem chave de API): únicos por
-/// seed (ex.: o apelido do dono). PNG direto, sem dependência de SVG.
+/// seed — na loja a seed é o id do item (`avatarSeed`), para que vitrine, folha
+/// e perfil de quem equipou desenhem o mesmo rosto. PNG direto, sem SVG.
 /// Na loja, cada estilo é um item pago (`payload['generated']`).
 const diceBearApiVersion = '7.x';
 const diceBearAvatarStyles = [

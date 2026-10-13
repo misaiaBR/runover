@@ -4,9 +4,10 @@ import 'package:provider/provider.dart';
 
 import '../models.dart';
 import '../services/api_client.dart';
-import '../services/profile_image_provider.dart';
 import '../state/app_state.dart';
+import '../widgets/avatar_shop_sheet.dart';
 import '../widgets/centered_content.dart';
+import '../widgets/cosmetics.dart';
 import '../widgets/team_exit.dart';
 import 'team_shop_screen.dart';
 
@@ -85,8 +86,10 @@ class TeamSettings {
 /// Configurações da equipe — a única superfície de ajustes do time.
 ///
 /// O conteúdo muda com o papel de quem abre, porque o servidor também muda:
-/// dono e admin editam entrada, convites, avisos, foto e nome; membro sem
-/// cargo vê esses dados e só pode sair. Dissolver é exclusivo do dono.
+/// dono e admin editam entrada, convites, avisos e nome; membro sem cargo vê
+/// esses dados e só pode sair. O emblema não é campo daqui: ele é item da Loja
+/// da equipe, e esta tela só abre a folha que compra e equipa. Dissolver é
+/// exclusivo do dono.
 class TeamSettingsScreen extends StatefulWidget {
   const TeamSettingsScreen({
     super.key,
@@ -104,12 +107,17 @@ class TeamSettingsScreen extends StatefulWidget {
 class _TeamSettingsScreenState extends State<TeamSettingsScreen> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _name;
-  late final TextEditingController _photoLink;
   late TeamSettings _baseline; // última versão salva no servidor
   late TeamSettings _s; // versão em edição
   late List<TeamJoinRequestInfo> _requests;
   late String? _inviteLink;
-  late String? _photoUrl;
+
+  /// O emblema é item da Loja da equipe, não campo de foto: a prévia precisa do
+  /// item equipado para desenhar o mesmo rosto que o painel desenha. O id vem da
+  /// equipe ao abrir e do inventário da equipe depois de cada compra.
+  late String? _emblemId;
+  List<ShopItem> _emblems = const [];
+
   bool _saving = false;
   bool _busy = false;
 
@@ -117,9 +125,7 @@ class _TeamSettingsScreenState extends State<TeamSettingsScreen> {
   bool get _isOwner => widget.team.isOwner;
   bool get _dirty => _s != _baseline;
 
-  /// Um avatar pronto é salvo como data URI. Despejar o base64 inteiro na caixa
-  /// de link a torna ilegível e fácil de corromper com uma edição.
-  bool get _inlinePhoto => (_photoUrl ?? '').startsWith('data:');
+  ShopItem? get _emblem => findItem(_emblems, _emblemId);
 
   @override
   void initState() {
@@ -127,21 +133,65 @@ class _TeamSettingsScreenState extends State<TeamSettingsScreen> {
     _baseline = TeamSettings.of(widget.team);
     _s = _baseline;
     _requests = List.of(widget.team.pendingRequests);
-    _photoUrl = widget.team.photoUrl;
     _inviteLink = _linkOf(widget.team.inviteToken);
+    _emblemId = widget.team.equippedAvatar;
     _name = TextEditingController(text: _s.name);
-    _photoLink = _inlinePhoto ? TextEditingController() : TextEditingController(text: _photoUrl ?? '');
+    _loadEmblems();
   }
 
   @override
   void dispose() {
     _name.dispose();
-    _photoLink.dispose();
     super.dispose();
   }
 
   static String? _linkOf(String? token) =>
       token == null || token.isEmpty ? null : '/teams/join/$token';
+
+  /// Catálogo de emblemas + o que a equipe tem equipado hoje.
+  ///
+  /// A leitura não vaza erro para a tela: sem ela a prévia fica na foto ou na
+  /// letra inicial — o mesmo que uma equipe sem emblema mostra — e a folha da
+  /// loja, que é o controle de verdade, carrega o catálogo dela própria e tem
+  /// botão de retry.
+  Future<void> _loadEmblems() async {
+    final api = context.read<AppState>().api;
+    final teamId = widget.team.id;
+    try {
+      final results = await Future.wait([
+        api.getShopCatalog(scope: 'team', category: 'avatar'),
+        api.getTeamInventory(teamId),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _emblems = results[0] as List<ShopItem>;
+        _emblemId = (results[1] as TeamInventory).equippedAvatar;
+      });
+    } catch (_) {
+      // Sem catálogo nada muda: a prévia cai no rosto que a equipe já tinha.
+    }
+  }
+
+  /// Abre a folha da loja da equipe. Membro sem cargo não chega aqui: o botão
+  /// só existe para quem o servidor deixa comprar.
+  Future<void> _pickEmblem() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (_) => AvatarShopSheet(
+        api: context.read<AppState>().api,
+        teamId: widget.team.id,
+        onChanged: () async {
+          // A compra aconteceu: a prévia tem de mostrar o emblema novo na hora,
+          // e o painel por trás também — a rota empurrada guarda a equipe com
+          // que foi aberta, então nada aqui se atualiza sozinho.
+          await _loadEmblems();
+          widget.onChanged();
+        },
+      ),
+    );
+  }
 
   void _set(TeamSettings next) => setState(() => _s = next);
 
@@ -202,17 +252,6 @@ class _TeamSettingsScreenState extends State<TeamSettingsScreen> {
       _name.text = _baseline.name;
     });
   }
-
-  Future<void> _savePhoto(String value) =>
-      _call((api) async {
-        await api.updateTeam(id: widget.team.id, photoUrl: value);
-        if (mounted) {
-          setState(() {
-            _photoUrl = value.isEmpty ? null : value;
-            if (value.isNotEmpty && !_inlinePhoto) _photoLink.text = value;
-          });
-        }
-      }).then((_) {});
 
   Future<void> _decide(TeamJoinRequestInfo req, bool accept) async {
     final updated = await _call(
@@ -330,8 +369,9 @@ class _TeamSettingsScreenState extends State<TeamSettingsScreen> {
           child: Form(
             key: _formKey,
             child: ListView(
-              // A lista própria da tela: dentro dela há a faixa horizontal de
-              // avatares, então testes rolam por esta chave, não por `ListView`.
+              // A lista própria da tela, com chave: em janela larga o que se vê
+              // é a linha de duas colunas, e os testes rolam por aqui, não por
+              // `ListView`.
               key: const Key('team-settings-list'),
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
               children: _sections(context),
@@ -360,15 +400,11 @@ class _TeamSettingsScreenState extends State<TeamSettingsScreen> {
       _Section(title: 'Perfil da equipe', children: [
         _ProfileFields(
           team: team,
-          photoUrl: _photoUrl,
+          emblem: _emblem,
           editable: _isAdmin,
-          busy: _busy,
           nameCtrl: _name,
-          photoLinkCtrl: _photoLink,
           onNameChanged: (v) => _set(_s.copyWith(name: v.trim())),
-          onPickPreset: _savePhoto,
-          onUseLink: () => _savePhoto(_photoLink.text.trim()),
-          onClearPhoto: () => _savePhoto(''),
+          onPickEmblem: _pickEmblem,
         ),
       ]),
       ListTile(
@@ -470,7 +506,8 @@ class _TeamSettingsScreenState extends State<TeamSettingsScreen> {
   }
 
   /// Peso de uma seção para o balanceamento: ela vale pelos cartões que carrega,
-  /// mais o título. O campo de foto é a coisa mais alta da tela e conta por seis.
+  /// mais o título. O bloco do emblema com o campo de nome é o mais alto da tela
+  /// e conta por três cartões.
   double _sectionWeight(Widget section) {
     if (section is _Section) {
       var weight = 1.0;
@@ -482,7 +519,7 @@ class _TeamSettingsScreenState extends State<TeamSettingsScreen> {
     return _childWeight(section);
   }
 
-  double _childWeight(Widget child) => child is _ProfileFields ? 6.0 : 1.0;
+  double _childWeight(Widget child) => child is _ProfileFields ? 3.0 : 1.0;
 
   bool get _onlyMember => widget.team.memberCount <= 1;
 
@@ -646,35 +683,29 @@ class _TeamSettingsScreenState extends State<TeamSettingsScreen> {
   }
 }
 
-/// Nome e foto. Dono/admin editam; membro vê os valores salvos.
+/// Nome e emblema. Dono/admin editam; membro vê os valores salvos.
 class _ProfileFields extends StatelessWidget {
   const _ProfileFields({
     required this.team,
-    required this.photoUrl,
+    required this.emblem,
     required this.editable,
-    required this.busy,
     required this.nameCtrl,
-    required this.photoLinkCtrl,
     required this.onNameChanged,
-    required this.onPickPreset,
-    required this.onUseLink,
-    required this.onClearPhoto,
+    required this.onPickEmblem,
   });
 
   final TeamDetail team;
-  final String? photoUrl;
+  final ShopItem? emblem;
   final bool editable;
-  final bool busy;
   final TextEditingController nameCtrl;
-  final TextEditingController photoLinkCtrl;
   final ValueChanged<String> onNameChanged;
-  final Future<void> Function(String value) onPickPreset;
-  final VoidCallback onUseLink;
-  final VoidCallback onClearPhoto;
+  final VoidCallback onPickEmblem;
 
   @override
   Widget build(BuildContext context) {
-    final image = profileImageProvider(photoUrl);
+    // O rosto é o do item equipado (a seed é o id do item); a foto da equipe
+    // aparece quando não há emblema da loja — a mesma regra do painel.
+    final image = profileAvatarImage(team.photoUrl, emblem);
     return Padding(
       padding: const EdgeInsets.all(14),
       child: Column(
@@ -712,7 +743,11 @@ class _ProfileFields extends StatelessWidget {
               const SizedBox(width: 14),
               Expanded(
                 child: Text(
-                  'Emblema, moldura e efeito ficam na Loja da equipe.',
+                  editable
+                      ? 'O emblema é item da Loja da equipe. Moldura, banner e '
+                            'efeito ficam lá junto.'
+                      : 'O emblema é item da Loja da equipe. Só o dono ou admins '
+                            'mudam.',
                   style: TextStyle(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                     fontSize: 12,
@@ -723,6 +758,16 @@ class _ProfileFields extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           if (editable) ...[
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                key: const Key('team-pick-emblem'),
+                onPressed: onPickEmblem,
+                icon: const Icon(Icons.storefront_outlined),
+                label: const Text('Escolher emblema na loja'),
+              ),
+            ),
+            const SizedBox(height: 16),
             TextFormField(
               controller: nameCtrl,
               maxLength: 40,
@@ -740,82 +785,6 @@ class _ProfileFields extends StatelessWidget {
                 return null;
               },
               onChanged: onNameChanged,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Foto da equipe',
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              height: 76,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: presetAvatars.length,
-                separatorBuilder: (_, _) => const SizedBox(width: 10),
-                itemBuilder: (_, i) {
-                  final preset = presetAvatars[i];
-                  return InkWell(
-                    key: Key('team-photo-${preset.label}'),
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: busy
-                        ? null
-                        : () async {
-                            final uri = await presetAvatarDataUri(preset.asset);
-                            if (uri == null || !context.mounted) return;
-                            await onPickPreset(uri);
-                          },
-                    child: Ink(
-                      width: 64,
-                      height: 64,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        image: DecorationImage(
-                          image: AssetImage(preset.asset),
-                          fit: BoxFit.cover,
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: photoLinkCtrl,
-              enabled: !busy,
-              keyboardType: TextInputType.url,
-              decoration: InputDecoration(
-                labelText: 'Link da foto',
-                hintText: 'https://…',
-                helperText: (photoUrl ?? '').startsWith('data:')
-                    ? 'A foto atual é um avatar pronto; digite um link para '
-                          'substituí-la.'
-                    : null,
-              ),
-            ),
-            const SizedBox(height: 8),
-            ValueListenableBuilder<TextEditingValue>(
-              valueListenable: photoLinkCtrl,
-              builder: (context, photo, _) => Wrap(
-                spacing: 8,
-                runSpacing: 4,
-                children: [
-                  OutlinedButton(
-                    onPressed: busy || photo.text.trim().isEmpty
-                        ? null
-                        : onUseLink,
-                    child: const Text('Usar link'),
-                  ),
-                  if (photoUrl != null && photoUrl!.isNotEmpty)
-                    TextButton(
-                      onPressed: busy ? null : onClearPhoto,
-                      child: const Text('Remover foto'),
-                    ),
-                ],
-              ),
             ),
           ] else ...[
             Text(

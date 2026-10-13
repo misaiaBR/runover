@@ -574,10 +574,11 @@ class ApiClient {
         ),
       );
 
+  /// Ajustes da equipe. Foto não é campo daqui: o emblema é item da loja da
+  /// equipe e passa por `/teams/{id}/purchase` e `/equip`.
   Future<TeamDetail> updateTeam({
     required String id,
     String? name,
-    String? photoUrl,
     String? joinMode,
     bool? listed,
     bool? notifyRisk,
@@ -585,7 +586,6 @@ class ApiClient {
   }) async {
     final body = <String, dynamic>{};
     if (name != null) body['name'] = name;
-    if (photoUrl != null) body['photo_url'] = photoUrl;
     if (joinMode != null) body['join_mode'] = joinMode;
     if (listed != null) body['listed'] = listed;
     if (notifyRisk != null) body['notify_risk'] = notifyRisk;
