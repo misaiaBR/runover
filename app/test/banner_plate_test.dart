@@ -453,6 +453,37 @@ void main() {
     }
   });
 
+  testWidgets('o gradiente desliza em onda, sem tranco na virada do ciclo', (
+    tester,
+  ) async {
+    late int virada;
+    late int quarto;
+    late int maiorPasso;
+    await tester.runAsync(() async {
+      final banner = _banner('banner_galeria', plate: 'gradient');
+      // Um ciclo inteiro amostrado a cada 1/60 de ciclo: se o recheio desliza de
+      // verdade, nenhum quadro anda mais que a fração que o movimento permite.
+      // Se ele serra (0..1 e volta ao zero), o último passo é o próprio salto.
+      final passos = <int>[];
+      var anterior = await _pixels(banner, progress: 0);
+      for (var i = 1; i <= 60; i++) {
+        final quadro = await _pixels(banner, progress: i / 60);
+        passos.add(_delta(anterior, quadro));
+        anterior = quadro;
+      }
+      virada = passos.last;
+      maiorPasso = passos.reduce((a, b) => a > b ? a : b);
+      quarto = _delta(
+        await _pixels(banner, progress: 0),
+        await _pixels(banner, progress: 0.25),
+      );
+    });
+    expect(virada, greaterThan(0), reason: 'sem movimento não há o que medir');
+    // A amplitude cabe num quarto de ciclo; um passo de 1/60 não pode comer um
+    // terço dela. Com a serra, a virada valia o ciclo inteiro e passava disso.
+    expect(maiorPasso, lessThan(quarto / 3));
+  });
+
   testWidgets('a placa animada respira na tela; a parada não', (tester) async {
     // É o teste que pega o relógio morto: um `repeat()` sem nada escutando
     // gasta quadro e deixa a faixa congelada no mesmo desenho.
@@ -613,6 +644,26 @@ void main() {
       const Offset(40, 20),
     );
     await tester.pump();
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('na web e no desktop o mouse passa e a placa acompanha', (
+    tester,
+  ) async {
+    // `Listener.onPointerMove` só existe com o botão pressionado. Sem o
+    // `onHover` do `MouseRegion` o paralaxe só se mexeria durante um arrasto —
+    // e quem usa mouse não arrasta para olhar o fundo da própria faixa.
+    await _mount(tester, _banner('a', plate: 'parallax'));
+    final mouse = await tester.createGesture(kind: ui.PointerDeviceKind.mouse);
+    addTearDown(mouse.removePointer);
+    final centro = tester.getCenter(find.byType(BannerPlate));
+    await mouse.addPointer(location: centro);
+    await tester.pump();
+    final parado = await _capture(tester);
+    await mouse.moveTo(centro + const Offset(30, 12));
+    await tester.pump();
+    final seguindo = await _capture(tester);
+    expect(_delta(parado, seguindo), greaterThan(0));
     expect(tester.takeException(), isNull);
   });
 
