@@ -17,11 +17,15 @@ import 'package:runover_app/theme.dart';
 import 'profile_screen_test.dart' show profileData;
 
 class _FakeGeo extends GeolocatorPlatform {
-  _FakeGeo({this.positions = const []});
+  _FakeGeo({this.positions = const [], this.streamError = false});
 
   /// Posições que o stream entrega depois do Iniciar — para testar o que a
   /// tela faz com um par de pontos de veículo.
   final List<Position> positions;
+
+  /// O stream falha depois de entregar as posições: é o GPS caindo no meio da
+  /// corrida, o único caso em que a gravação para sozinha.
+  final bool streamError;
 
   @override
   Future<bool> isLocationServiceEnabled() async => true;
@@ -39,8 +43,14 @@ class _FakeGeo extends GeolocatorPlatform {
       _fix();
 
   @override
-  Stream<Position> getPositionStream({LocationSettings? locationSettings}) =>
-      Stream.fromIterable(positions);
+  Stream<Position> getPositionStream({
+    LocationSettings? locationSettings,
+  }) async* {
+    for (final position in positions) {
+      yield position;
+    }
+    if (streamError) throw Exception('sem sinal');
+  }
 }
 
 Position _fix() => Position(
@@ -103,9 +113,13 @@ void main() {
     Territory? challengeTarget,
     Map<String, dynamic>? draft,
     List<Position>? positions,
+    bool streamError = false,
   }) async {
-    if (positions != null) {
-      GeolocatorPlatform.instance = _FakeGeo(positions: positions);
+    if (positions != null || streamError) {
+      GeolocatorPlatform.instance = _FakeGeo(
+        positions: positions ?? const [],
+        streamError: streamError,
+      );
     }
     SharedPreferences.setMockInitialValues({
       'runover_drafts_profile-test': jsonEncode([draft ?? draftJson()]),
@@ -154,7 +168,8 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('pausar com conquista avisa antes', (tester) async {
+  testWidgets('não existe pausar: a gravação vai do Iniciar ao Salvar',
+      (tester) async {
     await open(tester);
     expect(find.text('Continuar'), findsOneWidget);
 
@@ -162,38 +177,48 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Continuar'));
     await tester.pumpAndSettle();
-    expect(find.text('Pausar'), findsOneWidget);
 
-    await tester.tap(find.text('Pausar'));
-    await tester.pumpAndSettle();
-    expect(find.text('Pausar corrida?'), findsOneWidget);
-    expect(
-      find.textContaining('não quebra o território'),
-      findsOneWidget,
-    );
-
-    await tester.tap(find.text('Pausar mesmo assim'));
-    await tester.runAsync(() => Future.delayed(const Duration(seconds: 3)));
-    await tester.pumpAndSettle();
+    // A pessoa não tem como interromper de propósito, então não há botão de
+    // pausa, nem aviso de pausa, nem pausa registrada no resumo.
+    expect(find.text('Pausar'), findsNothing);
     expect(find.text('Pausar corrida?'), findsNothing);
-    expect(find.text('Continuar'), findsOneWidget);
-    expect(find.textContaining('Pausas (1): manual'), findsOneWidget);
+    expect(find.textContaining('Pausas'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('continuar correndo dispensa o aviso', (tester) async {
+  testWidgets('parada automática do GPS deixa continuar', (tester) async {
+    await open(tester, streamError: true);
+    await tester.ensureVisible(find.text('Continuar'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Continuar'));
+    await tester.pumpAndSettle();
+    await tester.runAsync(() => Future.delayed(const Duration(seconds: 2)));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('O GPS foi interrompido'), findsOneWidget);
+    expect(find.textContaining('Pausas (1): GPS'), findsOneWidget);
+    expect(find.text('Pausar'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('terminar para enviar não conta como pausa', (tester) async {
     await open(tester);
     await tester.ensureVisible(find.text('Continuar'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Continuar'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Pausar'));
+
+    await tester.ensureVisible(find.text('Salvar corrida'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Salvar corrida'));
+    await tester.runAsync(() => Future.delayed(const Duration(seconds: 2)));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Continuar correndo'));
-    await tester.pumpAndSettle();
-    expect(find.text('Pausar corrida?'), findsNothing);
-    expect(find.text('Pausar'), findsOneWidget);
+    // O envio falha (a API do teste não responde), e a gravação terminada para
+    // enviar não pode aparecer como pausa: antes aparecia, e duas tentativas
+    // viravam duas "pausas" que ninguém fez.
+    expect(find.textContaining('permanece neste aparelho'), findsOneWidget);
+    expect(find.textContaining('Pausas'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 

@@ -18,7 +18,9 @@ class RunDraft {
   /// `target_territory_id`: sem ele, quem fecha o laço na divisa de dois
   /// territórios desafia o que a sobreposição escolher.
   String? targetTerritoryId;
-  /// Pausas com motivo: manual, gps, app, limite.
+  /// Pausas detectadas pelo aparelho: gps, app, limite, velocidade. A pessoa não
+  /// pausa por escolha — o motivo `manual` só existe em rascunhos gravados antes
+  /// disso.
   final List<Map<String, String>> pauses;
   RunDraft({
     required this.id,

@@ -268,7 +268,7 @@ class _TrackingScreenState extends State<TrackingScreen>
             _onPosition,
             onError: (Object _) {
               if (_recording) {
-                _pause('gps');
+                _stopRecording('gps');
               }
               if (mounted) {
                 setState(
@@ -295,7 +295,7 @@ class _TrackingScreenState extends State<TrackingScreen>
     if (!_recording || !mounted) return;
     final d = _draft!;
     if (d.track.length >= 10000) {
-      _pause('limite');
+      _stopRecording('limite');
       setState(
         () => _message = 'Limite de pontos atingido. Salve esta corrida.',
       );
@@ -324,7 +324,7 @@ class _TrackingScreenState extends State<TrackingScreen>
     // em vez de coletar uma corrida que não pode ser salva.
     if (d.track.isNotEmpty &&
         TerritoryLoop.speedMps(d.track.last, candidate) > maxPlausibleSpeedMps) {
-      _pause('velocidade');
+      _stopRecording('velocidade');
       setState(
         () => _message =
             'Você está se movendo mais rápido que uma corrida — o registro foi '
@@ -509,7 +509,14 @@ class _TrackingScreenState extends State<TrackingScreen>
     }
   }
 
-  Future<void> _pause([String reason = 'manual']) async {    _recording = false;
+  /// A gravação para por um motivo que a pessoa não escolheu: caiu o GPS, o app
+  /// foi para segundo plano, o limite de pontos chegou, o movimento virou de
+  /// veículo. O percurso fica no aparelho e o botão passa a ser Continuar.
+  ///
+  /// Não existe pausar por escolha: uma corrida é contínua do Iniciar ao Salvar,
+  /// e a única quebra de traçado que aparece é a que o aparelho detectou.
+  Future<void> _stopRecording(String reason) async {
+    _recording = false;
     _draft?.logPause(reason);
     await _subscription?.cancel();
     _subscription = null;
@@ -517,43 +524,22 @@ class _TrackingScreenState extends State<TrackingScreen>
     if (mounted) setState(() {});
   }
 
-  /// Pausa pedida no botão com conquista ligada: a pausa em si não custa o
-  /// território, mas sair do lugar enquanto está pausado sim.
-  Future<void> _pauseWithWarning() async {
-    final draft = _draft;
-    if (draft == null || !draft.conquer || draft.track.isEmpty) {
-      await _pause();
-      return;
-    }
-    final pause = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Pausar corrida?'),
-        content: const Text(
-          'Pausar não quebra o território, desde que você retome onde parou. '
-          'Se se deslocar durante a pausa, o traçado deixa de ser contínuo e '
-          'a conquista não vale.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Continuar correndo'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Pausar mesmo assim'),
-          ),
-        ],
-      ),
-    );
-    if (pause == true) await _pause();
+  /// Termina a gravação para enviar. Não é pausa, então não entra no resumo:
+  /// antes entrava, e uma corrida com dois envios recusados mostrava pausas que
+  /// ninguém tinha feito.
+  Future<void> _endRecording() async {
+    _recording = false;
+    await _subscription?.cancel();
+    _subscription = null;
+    await _persist();
+    if (mounted) setState(() {});
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (!_recording || !mounted) return;
     if (state == AppLifecycleState.detached) {
-      _pause('app');
+      _stopRecording('app');
       if (mounted) {
         setState(
           () => _message =
@@ -570,7 +556,7 @@ class _TrackingScreenState extends State<TrackingScreen>
       _message = null;
     });
     try {
-      await _pause();
+      await _endRecording();
       final draft = _draft!;
       if (!draft.queued) {
         draft.name = _name.text.trim();
@@ -1032,20 +1018,15 @@ class _TrackingScreenState extends State<TrackingScreen>
                                 }
                               : null,
                         ),
-                      if (canEdit)
+                      // Não há botão de pausar: a corrida é contínua do Iniciar
+                      // ao Salvar, e o único motivo que aparece no resumo de
+                      // pausas é o que o aparelho detectou sozinho.
+                      if (canEdit && !_recording)
                         OutlinedButton.icon(
-                           onPressed: _starting
-                               ? null
-                               : (_recording ? _pauseWithWarning : _start),
-                          icon: Icon(
-                            _recording ? Icons.pause : Icons.play_arrow,
-                          ),
+                          onPressed: _starting ? null : _start,
+                          icon: const Icon(Icons.play_arrow),
                           label: Text(
-                            _recording
-                                ? 'Pausar'
-                                : track.isEmpty
-                                ? 'Iniciar'
-                                : 'Continuar',
+                            track.isEmpty ? 'Iniciar' : 'Continuar',
                           ),
                         ),
                       FilledButton.icon(
