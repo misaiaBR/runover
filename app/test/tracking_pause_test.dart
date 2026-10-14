@@ -202,8 +202,8 @@ void main() {
     await tester.runAsync(() => Future.delayed(const Duration(seconds: 2)));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('O GPS foi interrompido'), findsOneWidget);
     expect(find.textContaining('Pausas (1): GPS'), findsOneWidget);
+    expect(find.textContaining('O GPS foi interrompido'), findsOneWidget);
     expect(find.text('Pausar'), findsNothing);
     expect(tester.takeException(), isNull);
   });
@@ -271,6 +271,9 @@ void main() {
     expect(locationReads, greaterThan(0));
     // O pino do meu local e o botão de voltar a ele.
     expect(find.byIcon(Icons.my_location), findsNWidgets(2));
+    // O feedback do laço vive sobre o mapa: com o painel retraído ele continua
+    // aparecendo, porque é para cima que quem corre olha.
+    expect(find.textContaining('pontos de GPS para fechar'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

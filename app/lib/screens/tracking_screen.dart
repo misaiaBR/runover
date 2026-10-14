@@ -759,9 +759,9 @@ class _TrackingScreenState extends State<TrackingScreen>
       appBar: AppBar(
         title: Text(_recording ? 'Corrida em andamento' : 'Sua corrida'),
       ),
-      body: Column(
+      body: Stack(
         children: [
-          Expanded(
+          Positioned.fill(
             child: Stack(
               children: [
                 FlutterMap(
@@ -874,30 +874,55 @@ class _TrackingScreenState extends State<TrackingScreen>
                     ),
                   ],
                 ),
-                if (dispute != null)
-                  Positioned(
-                    top: 12,
-                    left: 12,
-                    right: 12,
-                    child: Card(
-                      child: ListTile(
-                        leading: const Icon(Icons.flag_outlined),
-                        title: Text(dispute),
-                      ),
-                    ),
+                // Os avisos vivos ficam no topo do mapa, não dentro do painel:
+                // é para cima que quem corre olha, e o painel pode estar
+                // retraído justo na hora em que a mensagem muda.
+                Positioned(
+                  top: 12,
+                  left: 12,
+                  right: 12,
+                  child: Column(
+                    children: [
+                      if (dispute != null)
+                        Card(
+                          child: ListTile(
+                            leading: const Icon(Icons.flag_outlined),
+                            title: Text(dispute),
+                          ),
+                        ),
+                      if (_targetHint(track) case final hint?)
+                        Card(
+                          child: ListTile(
+                            leading: const Icon(Icons.directions_run),
+                            title: Text(hint),
+                          ),
+                        ),
+                      if (d?.conquer ?? false)
+                        Card(
+                          child: ListTile(
+                            leading: Icon(
+                              loop.closed
+                                  ? Icons.check_circle_outline
+                                  : Icons.radio_button_unchecked,
+                              size: 18,
+                              // Laço fechado: tinta verde do brilho, não o
+                              // #22C55E do mock (sobre o fundo claro do cartão
+                              // ele fica abaixo de 3:1).
+                              color: loop.closed
+                                  ? Pal.successInk(context)
+                                  : Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
+                            ),
+                            title: Text(
+                              loop.label,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
-                if (_targetHint(track) case final hint?)
-                  Positioned(
-                    top: dispute == null ? 12 : 96,
-                    left: 12,
-                    right: 12,
-                    child: Card(
-                      child: ListTile(
-                        leading: const Icon(Icons.directions_run),
-                        title: Text(hint),
-                      ),
-                    ),
-                  ),
+                ),
                 // Volta ao próprio lugar sem ter de começar a corrida: é o gesto
                 // que responde "este mapa está me vendo?" antes do Iniciar.
                 Positioned(
@@ -915,15 +940,42 @@ class _TrackingScreenState extends State<TrackingScreen>
               ],
             ),
           ),
-          Flexible(
-            child: SingleChildScrollView(
+          // O mapa é o fundo da tela inteira e o painel sobe sobre ele: a
+          // divisão fixa ao meio deixava os números e as ações espremidos, e o
+          // resto das escolhas só existia rolando uma lista curta.
+          DraggableScrollableSheet(
+            initialChildSize: 0.55,
+            minChildSize: 0.42,
+            maxChildSize: 0.92,
+            builder: (context, sheetController) => Material(
+              elevation: 8,
+              color: Theme.of(context).colorScheme.surface,
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              ),
               child: SafeArea(
                 top: false,
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
+                child: Column(
+                  children: [
+                    // Alça de arrastar, na tinta do tema: é o convite para subir
+                    // o painel e ver o resto das escolhas.
+                    Container(
+                      width: 32,
+                      height: 4,
+                      margin: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant
+                            .withValues(alpha: 0.4),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    // Fixo no topo do painel: os números e as ações, sempre à
+                    // mão. O que é escolha desce na lista.
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
                       Text(
                         '${(meters / 1000).toStringAsFixed(2)} km  •  ${seconds ~/ 60}min ${seconds % 60}s',
                         style: Theme.of(context).textTheme.titleLarge,
@@ -941,47 +993,6 @@ class _TrackingScreenState extends State<TrackingScreen>
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           child: Text(_message!, textAlign: TextAlign.center),
-                        ),
-                      if ((_draft?.pauses.isNotEmpty ?? false))
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Text(
-                            _pauseSummary(_draft!.pauses),
-                            textAlign: TextAlign.center,
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ),
-                      if (d?.conquer ?? false)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Icon(
-                                loop.closed
-                                    ? Icons.check_circle_outline
-                                    : Icons.radio_button_unchecked,
-                                size: 18,
-                                // Laço fechado: tinta verde do brilho, não o
-                                // #22C55E do mock (sobre o fundo claro do
-                                // painel ele fica abaixo de 3:1).
-                                color: loop.closed
-                                    ? Pal.successInk(context)
-                                    : Theme.of(
-                                        context,
-                                      ).colorScheme.onSurfaceVariant,
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  loop.label,
-                                  textAlign: TextAlign.center,
-                                  style: Theme.of(context).textTheme.bodySmall,
-                                ),
-                              ),
-                            ],
-                          ),
                         ),
                       if (_permissionBlocked && !_recording)
                         Padding(
@@ -1053,6 +1064,23 @@ class _TrackingScreenState extends State<TrackingScreen>
                         'Mantenha o app aberto durante a gravação. Envie em até 7 dias.',
                         style: TextStyle(fontSize: 12),
                       ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: ListView(
+                        controller: sheetController,
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                        children: [
+                      if (_draft?.pauses.isNotEmpty ?? false)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Text(
+                            _pauseSummary(_draft!.pauses),
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
                       TextField(
                         controller: _name,
                         enabled: canEdit,
@@ -1180,8 +1208,10 @@ class _TrackingScreenState extends State<TrackingScreen>
                                 }
                               : null,
                         ),
-                    ],
-                  ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
