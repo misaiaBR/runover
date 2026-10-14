@@ -9,7 +9,7 @@ usuário que estava correndo: por isso ScoreEvent guarda ou `user_id` ou
 """
 from datetime import datetime
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import settings
@@ -78,7 +78,13 @@ def team_level_trail(score: int) -> list[dict]:
 
 
 def current_ownerships(db: Session) -> list[TerritoryOwnership]:
-    """A posse atual é a última linha por data, com desempate estável por ID."""
+    """A posse atual é a última linha por data, com desempate estável por ID.
+
+    Linha sem dono resolvido fica de fora. Excluir conta e dissolver equipe
+    anulam `owner_user_id`/`owner_team_id` de propósito (o território volta a
+    ficar livre, o histórico fica), e uma dessas linhas no topo faria o mapa
+    procurar um usuário que não existe mais.
+    """
     latest = db.query(
         TerritoryOwnership.id.label("ownership_id"),
         func.row_number().over(
@@ -94,6 +100,12 @@ def current_ownerships(db: Session) -> list[TerritoryOwnership]:
         )
         .join(latest, TerritoryOwnership.id == latest.c.ownership_id)
         .filter(latest.c.rank == 1)
+        .filter(
+            or_(
+                TerritoryOwnership.owner_user_id.isnot(None),
+                TerritoryOwnership.owner_team_id.isnot(None),
+            )
+        )
         .all()
     )
 
@@ -147,7 +159,12 @@ class RankingRow:
         equipped_banner: str | None = None,
         equipped_name_style: str | None = None,
         trophies: int = 0,
+        owner_id: str | None = None,
     ):
+        # `owner_id` é a âncora de quem procura a própria posição: nome de
+        # usuário é único, nome de equipe não é único em relação a ele, e uma
+        # equipe chamada como um corredor devolveria a posição errada.
+        self.owner_id = owner_id
         self.owner_type = owner_type
         self.name = name
         self.photo_url = photo_url
@@ -206,6 +223,7 @@ def full_ranking(db: Session, since: datetime | None = None) -> list[RankingRow]
             equipped_banner=u.equipped_banner,
             equipped_name_style=u.equipped_name_style,
             trophies=u.trophies,
+            owner_id=u.id,
         ))
     for t in db.query(Team).all():
         rows.append(RankingRow(
@@ -215,6 +233,7 @@ def full_ranking(db: Session, since: datetime | None = None) -> list[RankingRow]
             equipped_effect=t.equipped_effect,
             equipped_banner=t.equipped_banner,
             equipped_name_style=t.equipped_name_style,
+            owner_id=t.id,
         ))
 
     rows.sort(key=lambda r: (-r.score, r.name.lower()))
@@ -222,11 +241,8 @@ def full_ranking(db: Session, since: datetime | None = None) -> list[RankingRow]
 
 
 def rank_position(db: Session, user_id: str) -> int | None:
-    user = db.get(User, user_id)
-    if not user:
-        return None
     for i, row in enumerate(full_ranking(db), start=1):
-        if row.owner_type == "user" and row.name == user.username:
+        if row.owner_type == "user" and row.owner_id == user_id:
             return i
     return None
 
@@ -235,9 +251,8 @@ def user_rank_positions(db: Session) -> dict[str, int]:
     """{user_id: posição} no ranking combinado (usuários + equipes), para todos
     os usuários — usado para detectar quem mudou de posição após uma conquista
     (RF18 / RN11)."""
-    id_by_name = {u.username: u.id for u in db.query(User).all()}
-    positions: dict[str, int] = {}
-    for i, row in enumerate(full_ranking(db), start=1):
-        if row.owner_type == "user" and row.name in id_by_name:
-            positions[id_by_name[row.name]] = i
-    return positions
+    return {
+        row.owner_id: i
+        for i, row in enumerate(full_ranking(db), start=1)
+        if row.owner_type == "user"
+    }

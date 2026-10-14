@@ -7,6 +7,14 @@ import '../widgets/centered_content.dart';
 class RunDetailScreen extends StatelessWidget {
   final Map<String, dynamic> run;
   const RunDetailScreen({super.key, required this.run});
+
+  /// A caçada tem de aparecer no recibo: o spawn some do mapa para todo mundo
+  /// quando o laço o cobre, e sem uma linha dizendo isso o corredor não sabe se
+  /// pegou o que foi correr atrás.
+  static String _capturedLabel(int captured) => captured == 1
+      ? 'Fechou 1 território selvagem.'
+      : 'Fechou $captured territórios selvagens.';
+
   @override
   Widget build(BuildContext context) {
     final track = run['track'] as List? ?? [];
@@ -103,6 +111,8 @@ class RunDetailScreen extends StatelessWidget {
                     Text(
                       '+${claim['points_awarded']} pontos • ${(claim['area_m2'] as num).toStringAsFixed(0)} m²',
                     ),
+                    if ((claim['spawns_captured'] as int? ?? 0) > 0)
+                      Text(_capturedLabel(claim['spawns_captured'] as int)),
                     Text(
                       'Nível ${claim['new_level']}${claim['leveled_up'] == true ? ' — subiu de nível!' : ''}',
                     ),

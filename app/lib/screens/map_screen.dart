@@ -292,12 +292,32 @@ class _MapScreenState extends State<MapScreen>
   }
 
   void _openDetail(Territory t) {
+    final profile = context.read<AppState>().profile;
+    // Só se desafia território de rival: o seu e o da sua equipe já estão
+    // bloqueados no servidor, e um botão que fosse comer o próprio poeira
+    // seria escolha sem consequência.
+    final rival = isRivalTerritory(
+      t,
+      myUsername: profile?.username,
+      myTeamName: profile?.teamName,
+    );
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (_) => _TerritorySheet(territory: t),
+      builder: (_) => _TerritorySheet(
+        territory: t,
+        canChallenge: rival,
+        onChallenge: () {
+          // Sai da ficha e entra na corrida com o alvo declarado: o servidor
+          // só aceita o desafio se o laço passar por dentro deste território.
+          Navigator.of(context).pop();
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => TrackingScreen(challengeTarget: t)),
+          );
+        },
+      ),
     );
   }
 
@@ -718,7 +738,15 @@ class _HeatLegend extends StatelessWidget {
 class _TerritorySheet extends StatefulWidget {
   final Territory territory;
 
-  const _TerritorySheet({required this.territory});
+  /// Território de rival: só aí a ficha oferece o desafio.
+  final bool canChallenge;
+  final VoidCallback? onChallenge;
+
+  const _TerritorySheet({
+    required this.territory,
+    this.canChallenge = false,
+    this.onChallenge,
+  });
 
   @override
   State<_TerritorySheet> createState() => _TerritorySheetState();
@@ -860,6 +888,15 @@ class _TerritorySheetState extends State<_TerritorySheet> {
               fontSize: 13,
             ),
           ),
+          if (widget.canChallenge && widget.onChallenge != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: FilledButton.icon(
+                onPressed: widget.onChallenge,
+                icon: const Icon(Icons.flag),
+                label: const Text('Desafiar este território'),
+              ),
+            ),
         ],
       ),
     );

@@ -547,6 +547,10 @@ class ClaimRequest(BaseModel):
     # Desafio de retomada: "pace" (ritmo) ou "distance" (distância),
     # escolhido antes de correr. Obrigatório só contra território com marca.
     challenge: str | None = None
+    # Território que o corredor escolheu desafiar, quando escolheu um. Sem ele,
+    # quem fecha um laço sobre a divisa de dois territórios desafia o que a
+    # sobreposição escolher — não o que a pessoa mirou.
+    target_territory_id: str | None = Field(default=None, max_length=80)
 
     @field_validator("challenge")
     @classmethod
@@ -569,6 +573,10 @@ class ClaimResponse(BaseModel):
     challenge_won: bool | None = None  # None = território novo, sem desafio
     beaten_pace_seconds_per_km: int | None = None
     beaten_distance_m: float | None = None
+    # Quantos territórios selvagens o laço cobriu e consumiu nesta corrida. Sem
+    # este número, "caçar selvagem" não tem desfecho: o spawn some do mapa para
+    # todo mundo e o corredor não recebe nem uma linha dizendo que pegou ele.
+    spawns_captured: int = 0
 
 
 # ---------- Desafios do dia (sorteados pelo servidor) ----------

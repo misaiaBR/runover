@@ -92,9 +92,13 @@ void main() {
     'team_id': null,
   };
 
-  Future<void> open(WidgetTester tester) async {
+  Future<void> open(
+    WidgetTester tester, {
+    Territory? challengeTarget,
+    Map<String, dynamic>? draft,
+  }) async {
     SharedPreferences.setMockInitialValues({
-      'runover_drafts_profile-test': jsonEncode([draftJson()]),
+      'runover_drafts_profile-test': jsonEncode([draft ?? draftJson()]),
     });
     final api = ApiClient(
       client: MockClient((request) async {
@@ -133,7 +137,7 @@ void main() {
         value: state,
         child: MaterialApp(
           theme: buildRunoverTheme(),
-          home: const TrackingScreen(),
+          home: TrackingScreen(challengeTarget: challengeTarget),
         ),
       ),
     );
@@ -182,4 +186,48 @@ void main() {
     expect(find.text('Pausar'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('desafiar com corrida em andamento avisa em vez de trocar de alvo',
+      (tester) async {
+    await open(tester, challengeTarget: _rivalTerritory());
+    expect(
+      find.textContaining('o desafio escolhido não foi aplicado'),
+      findsOneWidget,
+    );
+    // A dica do alvo declarado não pode aparecer num percurso que não o carrega.
+    expect(find.textContaining('Desafio declarado'), findsNothing);
+    final prefs = await SharedPreferences.getInstance();
+    final rows =
+        jsonDecode(prefs.getString('runover_drafts_profile-test')!) as List;
+    expect(rows.single['target_territory_id'], isNull);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('rascunho sem trajeto adota o alvo escolhido no mapa',
+      (tester) async {
+    await open(
+      tester,
+      challengeTarget: _rivalTerritory(),
+      draft: draftJson()..['track'] = [],
+    );
+    final prefs = await SharedPreferences.getInstance();
+    final rows =
+        jsonDecode(prefs.getString('runover_drafts_profile-test')!) as List;
+    expect(rows.single['target_territory_id'], 'territorio-alvo');
+    expect(rows.single['conquer'], isTrue);
+    expect(find.textContaining('Desafio declarado'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }
+
+Territory _rivalTerritory() => Territory.fromJson({
+  'id': 'territorio-alvo',
+  'name': 'Praça do Desafio',
+  'coordinates': const [],
+  'center': const {'lat': -23.6489, 'lng': -46.8523},
+  'radius_m': 80,
+  'status': 'conquistado',
+  'owner_type': 'user',
+  'owner_display': 'outro',
+  'takeovers': 0,
+});

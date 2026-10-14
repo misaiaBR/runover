@@ -63,4 +63,15 @@ void main() {
     }
     expect(tester.takeException(), isNull);
   });
+
+  test('escolher uma mecânica é intenção de conquistar', () {
+    // A folha promete território nas três opções; a corrida aberta por qualquer
+    // uma delas tem de começar com o alternador ligado.
+    expect(conquestIntended(mode: PlayMode.freeLoop), isTrue);
+    expect(conquestIntended(mode: PlayMode.huntWild), isTrue);
+    expect(conquestIntended(mode: PlayMode.challenge), isTrue);
+    expect(conquestIntended(target: const Object()), isTrue);
+    expect(conquestIntended(challengeTarget: const Object()), isTrue);
+    expect(conquestIntended(), isFalse);
+  });
 }
