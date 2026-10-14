@@ -95,6 +95,30 @@ class _TrackingScreenState extends State<TrackingScreen>
   /// nenhuma prova de que estava vendo o lugar de quem corre.
   ll.LatLng? _here;
   bool _lookingHere = false;
+
+  /// Pares consecutivos acima do teto de corrida. Um só pode ser o GPS errando
+  /// uma leitura; dois são movimento de veículo.
+  int _fastPairs = 0;
+
+  /// O GPS erra assim: um ponto longe demais, rápido demais, e o próximo volta
+  /// para o lugar. Não é deslocamento — é leitura torta.
+  bool _looksLikeBadFix(
+    Map<String, dynamic> previous,
+    Map<String, dynamic> next,
+  ) {
+    final previousTime = DateTime.tryParse('${previous['timestamp']}');
+    final currentTime = DateTime.tryParse('${next['timestamp']}');
+    if (previousTime == null || currentTime == null) return false;
+    final elapsed = currentTime.difference(previousTime).inSeconds;
+    if (elapsed <= 0 || elapsed > 5) return false;
+    return Geolocator.distanceBetween(
+      (previous['lat'] as num).toDouble(),
+      (previous['lng'] as num).toDouble(),
+      (next['lat'] as num).toDouble(),
+      (next['lng'] as num).toDouble(),
+    ) >
+        250;
+  }
   final _name = TextEditingController();
 
   @override
@@ -343,6 +367,7 @@ class _TrackingScreenState extends State<TrackingScreen>
         );
       }
       if (!mounted) return;
+      _fastPairs = 0;
       _draft!.beginSegment();
       await _store!.save(_draft!);
       if (!mounted) return;
@@ -412,46 +437,37 @@ class _TrackingScreenState extends State<TrackingScreen>
       'segment': d.segment,
       'accuracy': position.accuracy,
     };
-    // Veículo não é corrida: o servidor recusaria o envio inteiro por causa
-    // deste par de pontos. O aparelho para de gravar na hora em que percebe,
-    // em vez de coletar uma corrida que não pode ser salva.
-    if (d.track.isNotEmpty &&
-        TerritoryLoop.speedMps(d.track.last, candidate) > maxPlausibleSpeedMps) {
-      _stopRecording('velocidade');
-      setState(
-        () => _message =
-            'Você está se movendo mais rápido que uma corrida — o registro foi '
-            'pausado e este ponto não foi gravado. Estava em veículo? Salve ou '
-            'descarte a corrida na aba Corridas antes de continuar a pé.',
-      );
-      return;
-    }
     if (!TrackingScreenRouteProcessor.isUsablePoint(
       candidate,
       accuracyMeters: 50,
     )) {
       return;
     }
-    setState(() {
-      final previous = d.track.isEmpty ? null : d.track.last;
-      if (previous != null) {
-        final previousTime = DateTime.tryParse(previous['timestamp'] as String);
-        final currentTime = DateTime.tryParse(candidate['timestamp'] as String);
-        if (previousTime != null &&
-            currentTime != null &&
-            currentTime.isAfter(previousTime)) {
-          final distance = Geolocator.distanceBetween(
-            (previous['lat'] as num).toDouble(),
-            (previous['lng'] as num).toDouble(),
-            (candidate['lat'] as num).toDouble(),
-            (candidate['lng'] as num).toDouble(),
-          );
-          final elapsed = currentTime.difference(previousTime).inSeconds;
-          if (elapsed > 0 && distance > 250 && elapsed <= 5) {
-            return;
-          }
-        }
+    // Veículo não é corrida: o servidor recusaria o envio inteiro por causa
+    // deste par. Mas o GPS também erra — uma leitura torta isolada não pode
+    // parar a corrida de quem está correndo, e era justamente isso que o filtro
+    // de salto antigo descartava em silêncio. O que separa os dois é a
+    // insistência: um salto fora do lugar é jogado fora, e o segundo par
+    // consecutivo acima do teto encerra a gravação. Um deslocamento rápido que
+    // não tem cara de leitura torta — trem, ônibus — encerra na primeira vez.
+    if (d.track.isNotEmpty &&
+        TerritoryLoop.speedMps(d.track.last, candidate) > maxPlausibleSpeedMps) {
+      final jumped = _looksLikeBadFix(d.track.last, candidate);
+      _fastPairs = jumped ? _fastPairs + 1 : 2;
+      if (_fastPairs >= 2) {
+        _fastPairs = 0;
+        _stopRecording('velocidade');
+        setState(
+          () => _message =
+              'Você está se movendo mais rápido que uma corrida — o registro foi '
+              'pausado e este ponto não foi gravado. Estava em veículo? Salve ou '
+              'descarte a corrida na aba Corridas antes de continuar a pé.',
+        );
       }
+      return;
+    }
+    _fastPairs = 0;
+    setState(() {
       d.track.add(candidate);
       _markContested(candidate);
     });

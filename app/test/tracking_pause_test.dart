@@ -302,6 +302,58 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('leitura torta do GPS é jogada fora sem parar a corrida',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await open(
+      tester,
+      draft: draftJson()..['track'] = [],
+      positions: [
+        _fixAt(0),
+        _fixAt(2, latStep: 0.0036), // ~400 m em 2 s: o GPS errou este ponto
+        _fixAt(4),
+      ],
+    );
+    await tester.tap(find.text('Iniciar'));
+    await tester.pumpAndSettle();
+    await tester.runAsync(() => Future.delayed(const Duration(seconds: 2)));
+    await tester.pumpAndSettle();
+
+    // Uma leitura isolada não pode encerrar a corrida de quem está correndo:
+    // era isso que o filtro de salto antigo descartava em silêncio.
+    expect(find.textContaining('mais rápido que uma corrida'), findsNothing);
+    expect(find.textContaining('Pausas'), findsNothing);
+    // Só os dois pontos bons entraram.
+    expect(find.textContaining('Faltam 2 pontos de GPS'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('saltos rápidos consecutivos são veículo, e a gravação para',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await open(
+      tester,
+      draft: draftJson()..['track'] = [],
+      positions: [
+        _fixAt(0),
+        _fixAt(2, latStep: 0.0036),
+        _fixAt(4, latStep: 0.0072),
+      ],
+    );
+    await tester.tap(find.text('Iniciar'));
+    await tester.pumpAndSettle();
+    await tester.runAsync(() => Future.delayed(const Duration(seconds: 2)));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('mais rápido que uma corrida'), findsOneWidget);
+    expect(find.textContaining('Pausas (1): veículo'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('movimento de veículo pausa o registro em vez de gravar',
       (tester) async {
     // A barra de ação fica abaixo dos 600 px da dobra de teste: sem janela alta
