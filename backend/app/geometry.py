@@ -64,9 +64,14 @@ def validate_track_for_fraud(points: list[tuple[float, float, float]]) -> None:
             raise TrackValidationError("Os horários do percurso devem estar em ordem crescente.")
         speed = haversine_m(lat1, lng1, lat2, lng2) / dt
         if speed > settings.max_plausible_speed_mps:
+            # RNF17/RN18 — a mensagem nomeia a causa. O caso mais comum não é
+            # fraude: é corrida gravada dentro de ônibus ou trem, e "verifique as
+            # permissões de localização" mandava o corredor atrás de um ajuste
+            # que não tinha nada a ver com o problema dele.
             raise TrackValidationError(
-                "Movimento incompatível com uma corrida real — possível GPS falso. "
-                "Verifique as permissões de localização e tente novamente."
+                "Há movimento mais rápido do que uma corrida alcança no "
+                "percurso. Se você estava em veículo, a corrida não pode ser "
+                "registrada; se estava a pé, o GPS falhou nesse trecho."
             )
 
 

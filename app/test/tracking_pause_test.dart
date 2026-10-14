@@ -16,7 +16,21 @@ import 'package:runover_app/theme.dart';
 
 import 'profile_screen_test.dart' show profileData;
 
+/// Quantas vezes a tela pediu uma leitura de localização. É como o teste sabe que
+/// o mapa se localizou ao abrir, e não só depois do Iniciar.
+int locationReads = 0;
+
 class _FakeGeo extends GeolocatorPlatform {
+  _FakeGeo({this.positions = const [], this.streamError = false});
+
+  /// Posições que o stream entrega depois do Iniciar — para testar o que a
+  /// tela faz com um par de pontos de veículo.
+  final List<Position> positions;
+
+  /// O stream falha depois de entregar as posições: é o GPS caindo no meio da
+  /// corrida, o único caso em que a gravação para sozinha.
+  final bool streamError;
+
   @override
   Future<bool> isLocationServiceEnabled() async => true;
 
@@ -29,12 +43,20 @@ class _FakeGeo extends GeolocatorPlatform {
       LocationPermission.whileInUse;
 
   @override
-  Future<Position> getCurrentPosition({LocationSettings? locationSettings}) async =>
-      _fix();
+  Future<Position> getCurrentPosition({LocationSettings? locationSettings}) async {
+    locationReads++;
+    return _fix();
+  }
 
   @override
-  Stream<Position> getPositionStream({LocationSettings? locationSettings}) =>
-      const Stream.empty();
+  Stream<Position> getPositionStream({
+    LocationSettings? locationSettings,
+  }) async* {
+    for (final position in positions) {
+      yield position;
+    }
+    if (streamError) throw Exception('sem sinal');
+  }
 }
 
 Position _fix() => Position(
@@ -54,6 +76,7 @@ void main() {
   late GeolocatorPlatform original;
 
   setUp(() {
+    locationReads = 0;
     original = GeolocatorPlatform.instance;
     GeolocatorPlatform.instance = _FakeGeo();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -96,7 +119,15 @@ void main() {
     WidgetTester tester, {
     Territory? challengeTarget,
     Map<String, dynamic>? draft,
+    List<Position>? positions,
+    bool streamError = false,
   }) async {
+    if (positions != null || streamError) {
+      GeolocatorPlatform.instance = _FakeGeo(
+        positions: positions ?? const [],
+        streamError: streamError,
+      );
+    }
     SharedPreferences.setMockInitialValues({
       'runover_drafts_profile-test': jsonEncode([draft ?? draftJson()]),
     });
@@ -144,7 +175,8 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('pausar com conquista avisa antes', (tester) async {
+  testWidgets('não existe pausar: a gravação vai do Iniciar ao Salvar',
+      (tester) async {
     await open(tester);
     expect(find.text('Continuar'), findsOneWidget);
 
@@ -152,38 +184,48 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Continuar'));
     await tester.pumpAndSettle();
-    expect(find.text('Pausar'), findsOneWidget);
 
-    await tester.tap(find.text('Pausar'));
-    await tester.pumpAndSettle();
-    expect(find.text('Pausar corrida?'), findsOneWidget);
-    expect(
-      find.textContaining('não quebra o território'),
-      findsOneWidget,
-    );
-
-    await tester.tap(find.text('Pausar mesmo assim'));
-    await tester.runAsync(() => Future.delayed(const Duration(seconds: 3)));
-    await tester.pumpAndSettle();
+    // A pessoa não tem como interromper de propósito, então não há botão de
+    // pausa, nem aviso de pausa, nem pausa registrada no resumo.
+    expect(find.text('Pausar'), findsNothing);
     expect(find.text('Pausar corrida?'), findsNothing);
-    expect(find.text('Continuar'), findsOneWidget);
-    expect(find.textContaining('Pausas (1): manual'), findsOneWidget);
+    expect(find.textContaining('Pausas'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('continuar correndo dispensa o aviso', (tester) async {
+  testWidgets('parada automática do GPS deixa continuar', (tester) async {
+    await open(tester, streamError: true);
+    await tester.ensureVisible(find.text('Continuar'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Continuar'));
+    await tester.pumpAndSettle();
+    await tester.runAsync(() => Future.delayed(const Duration(seconds: 2)));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Pausas (1): GPS'), findsOneWidget);
+    expect(find.textContaining('O GPS foi interrompido'), findsOneWidget);
+    expect(find.text('Pausar'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('terminar para enviar não conta como pausa', (tester) async {
     await open(tester);
     await tester.ensureVisible(find.text('Continuar'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Continuar'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Pausar'));
+
+    await tester.ensureVisible(find.text('Salvar corrida'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Salvar corrida'));
+    await tester.runAsync(() => Future.delayed(const Duration(seconds: 2)));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Continuar correndo'));
-    await tester.pumpAndSettle();
-    expect(find.text('Pausar corrida?'), findsNothing);
-    expect(find.text('Pausar'), findsOneWidget);
+    // O envio falha (a API do teste não responde), e a gravação terminada para
+    // enviar não pode aparecer como pausa: antes aparecia, e duas tentativas
+    // viravam duas "pausas" que ninguém fez.
+    expect(find.textContaining('permanece neste aparelho'), findsOneWidget);
+    expect(find.textContaining('Pausas'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -218,7 +260,138 @@ void main() {
     expect(find.textContaining('Desafio declarado'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('o mapa abre mostrando onde eu estou, sem esperar o Iniciar',
+      (tester) async {
+    await open(tester, draft: draftJson()..['track'] = []);
+    await tester.pumpAndSettle();
+
+    // Sem isto a tela abria num ponto fixo do mapa e só se mexia depois de
+    // começar a gravar — nenhuma prova de que estava vendo o lugar da pessoa.
+    expect(locationReads, greaterThan(0));
+    // O pino do meu local e o botão de voltar a ele.
+    expect(find.byIcon(Icons.my_location), findsNWidgets(2));
+    // O feedback do laço vive sobre o mapa: com o painel retraído ele continua
+    // aparecendo, porque é para cima que quem corre olha.
+    expect(find.textContaining('pontos de GPS para fechar'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('descartar apaga o percurso e libera a tela para outra corrida',
+      (tester) async {
+    await open(tester);
+    await tester.ensureVisible(find.text('Descartar corrida'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Descartar corrida'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Descartar esta corrida?'), findsOneWidget);
+    expect(find.textContaining('pontos de GPS serão apagados'), findsOneWidget);
+
+    await tester.tap(find.text('Descartar'));
+    await tester.runAsync(() => Future.delayed(const Duration(seconds: 2)));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Percurso descartado'), findsOneWidget);
+    // Sem trajeto, o botão volta a ser Iniciar: a corrida nova não herda a que
+    // foi jogada fora.
+    expect(find.text('Iniciar'), findsOneWidget);
+    expect(find.text('Descartar corrida'), findsNothing);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('runover_drafts_profile-test'), '[]');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('leitura torta do GPS é jogada fora sem parar a corrida',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await open(
+      tester,
+      draft: draftJson()..['track'] = [],
+      positions: [
+        _fixAt(0),
+        _fixAt(2, latStep: 0.0036), // ~400 m em 2 s: o GPS errou este ponto
+        _fixAt(4),
+      ],
+    );
+    await tester.tap(find.text('Iniciar'));
+    await tester.pumpAndSettle();
+    await tester.runAsync(() => Future.delayed(const Duration(seconds: 2)));
+    await tester.pumpAndSettle();
+
+    // Uma leitura isolada não pode encerrar a corrida de quem está correndo:
+    // era isso que o filtro de salto antigo descartava em silêncio.
+    expect(find.textContaining('mais rápido que uma corrida'), findsNothing);
+    expect(find.textContaining('Pausas'), findsNothing);
+    // Só os dois pontos bons entraram.
+    expect(find.textContaining('Faltam 2 pontos de GPS'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('saltos rápidos consecutivos são veículo, e a gravação para',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await open(
+      tester,
+      draft: draftJson()..['track'] = [],
+      positions: [
+        _fixAt(0),
+        _fixAt(2, latStep: 0.0036),
+        _fixAt(4, latStep: 0.0072),
+      ],
+    );
+    await tester.tap(find.text('Iniciar'));
+    await tester.pumpAndSettle();
+    await tester.runAsync(() => Future.delayed(const Duration(seconds: 2)));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('mais rápido que uma corrida'), findsOneWidget);
+    expect(find.textContaining('Pausas (1): veículo'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('movimento de veículo pausa o registro em vez de gravar',
+      (tester) async {
+    // A barra de ação fica abaixo dos 600 px da dobra de teste: sem janela alta
+    // o toque em "Iniciar" cai fora da tela e a gravação nem começa.
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await open(
+      tester,
+      draft: draftJson()..['track'] = [],
+      positions: [_fixAt(0), _fixAt(5, latStep: 0.0018)],
+    );
+    await tester.tap(find.text('Iniciar'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('mais rápido que uma corrida'), findsOneWidget);
+    // O ponto de trem não entra no trajeto: com só o primeiro ponto gravado a
+    // corrida continua em 0,00 km, e a pausa aparece com o motivo.
+    expect(find.textContaining('0.00 km'), findsOneWidget);
+    expect(find.textContaining('Pausas (1): veículo'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }
+
+/// ~200 m em 5 s = 40 m/s: acima do teto que o servidor usa para decidir que o
+/// movimento não é de uma corrida (`max_plausible_speed_mps`).
+Position _fixAt(int second, {double latStep = 0}) => Position(
+  longitude: -46.8523,
+  latitude: -23.6489 + latStep,
+  timestamp: DateTime.utc(2026, 10, 13, 18, 0, second),
+  accuracy: 10,
+  altitude: 0,
+  altitudeAccuracy: 0,
+  heading: 0,
+  headingAccuracy: 0,
+  speed: 0,
+  speedAccuracy: 0,
+);
 
 Territory _rivalTerritory() => Territory.fromJson({
   'id': 'territorio-alvo',

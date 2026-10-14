@@ -26,6 +26,7 @@ String _pauseSummary(List<Map<String, String>> pauses) {
     'gps' => 'GPS',
     'app' => 'app',
     'limite' => 'limite',
+    'velocidade' => 'veículo',
     _ => 'manual',
   };
   String time(String iso) {
@@ -88,6 +89,36 @@ class _TrackingScreenState extends State<TrackingScreen>
   bool _challengeDeclined = false;
   final _mapController = MapController();
   bool _mapReady = false;
+
+  /// Onde o aparelho está, lido assim que a tela abre. Antes o mapa abria num
+  /// ponto fixo e só se mexia quando a gravação começava — a tela não dava
+  /// nenhuma prova de que estava vendo o lugar de quem corre.
+  ll.LatLng? _here;
+  bool _lookingHere = false;
+
+  /// Pares consecutivos acima do teto de corrida. Um só pode ser o GPS errando
+  /// uma leitura; dois são movimento de veículo.
+  int _fastPairs = 0;
+
+  /// O GPS erra assim: um ponto longe demais, rápido demais, e o próximo volta
+  /// para o lugar. Não é deslocamento — é leitura torta.
+  bool _looksLikeBadFix(
+    Map<String, dynamic> previous,
+    Map<String, dynamic> next,
+  ) {
+    final previousTime = DateTime.tryParse('${previous['timestamp']}');
+    final currentTime = DateTime.tryParse('${next['timestamp']}');
+    if (previousTime == null || currentTime == null) return false;
+    final elapsed = currentTime.difference(previousTime).inSeconds;
+    if (elapsed <= 0 || elapsed > 5) return false;
+    return Geolocator.distanceBetween(
+      (previous['lat'] as num).toDouble(),
+      (previous['lng'] as num).toDouble(),
+      (next['lat'] as num).toDouble(),
+      (next['lng'] as num).toDouble(),
+    ) >
+        250;
+  }
   final _name = TextEditingController();
 
   @override
@@ -156,6 +187,7 @@ class _TrackingScreenState extends State<TrackingScreen>
             ? 'Corrida recuperada. Continue ou salve o percurso já registrado.'
             : 'Toque em Iniciar para registrar seu percurso.';
       });
+      unawaited(_locateHere());
       try {
         final team = await state.api.getMyTeam();
         if (mounted) setState(() => _team = team);
@@ -203,6 +235,105 @@ class _TrackingScreenState extends State<TrackingScreen>
     }
   }
 
+  Future<Position?> _firstFixOrNull() async {
+    try {
+      return await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.best,
+          timeLimit: Duration(seconds: 8),
+        ),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Joga o percurso fora deste aparelho e deixa a tela pronta para outra corrida.
+  /// Num envio congelado o aviso é explícito: a corrida pode já ter chegado ao
+  /// servidor, e descartar não desfaz o que foi salvo lá.
+  Future<void> _discard() async {
+    final draft = _draft;
+    final store = _store;
+    if (draft == null || store == null || _busy) return;
+    final sure = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Descartar esta corrida?'),
+        content: Text(
+          draft.queued
+              ? 'O último envio pode ter chegado ao servidor — confira na aba '
+                    'Corridas antes de apagar. Os ${draft.track.length} pontos '
+                    'deste aparelho serão apagados.'
+              : draft.track.isEmpty
+              ? 'Este percurso ainda não tem pontos gravados.'
+              : '${draft.track.length} pontos de GPS serão apagados deste '
+                    'aparelho. Corridas já enviadas não são afetadas.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Manter'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Descartar'),
+          ),
+        ],
+      ),
+    );
+    if (sure != true || !mounted) return;
+    _recording = false;
+    await _subscription?.cancel();
+    _subscription = null;
+    try {
+      await store.remove(draft.id);
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _message =
+              'Não foi possível apagar o percurso neste aparelho.',
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
+    setState(() {
+      _draft = RunDraft.create();
+      _contested.clear();
+      _nearbyMarks = null;
+      _challengeDeclined = false;
+      _name.clear();
+      _message = 'Percurso descartado. Toque em Iniciar para começar outra.';
+    });
+  }
+
+  /// Lê onde o aparelho está e centraliza o mapa ali. Melhor esforço: sem
+  /// permissão ou sem sinal a tela continua funcionando como antes, só não mostra
+  /// o ponto — e o Iniciar continua pedindo a permissão com a mensagem própria.
+  Future<void> _locateHere() async {
+    if (_lookingHere) return;
+    setState(() => _lookingHere = true);
+    try {
+      final raw = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.best,
+          timeLimit: Duration(seconds: 15),
+        ),
+      );
+      final pos = await _refiner.refine(raw);
+      if (!mounted) return;
+      setState(() {
+        _here = ll.LatLng(pos.latitude, pos.longitude);
+        _lookingHere = false;
+      });
+      if (_mapReady && (_draft?.track.isEmpty ?? true)) {
+        _mapController.move(_here!, 16);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _lookingHere = false);
+    }
+  }
+
   Future<void> _start() async {
     if (_starting || _recording || _draft == null || _draft!.queued) return;
     setState(() => _starting = true);
@@ -224,6 +355,19 @@ class _TrackingScreenState extends State<TrackingScreen>
         );
       }
       if (!mounted) return;
+      // Começar dentro de um trem não é começar uma corrida. Melhor esforço:
+      // sem leitura de velocidade (plataforma não informa, ou o sinal demora), a
+      // porta não bloqueia ninguém — o par de pontos durante a gravação continua
+      // sendo a regra que vale.
+      final first = await _firstFixOrNull();
+      if (first != null && first.speed > maxPlausibleSpeedMps) {
+        throw ApiException(
+          'Você está se movendo rápido demais para começar uma corrida. '
+          'Pare, espere alguns segundos e comece de novo.',
+        );
+      }
+      if (!mounted) return;
+      _fastPairs = 0;
       _draft!.beginSegment();
       await _store!.save(_draft!);
       if (!mounted) return;
@@ -242,7 +386,7 @@ class _TrackingScreenState extends State<TrackingScreen>
             _onPosition,
             onError: (Object _) {
               if (_recording) {
-                _pause('gps');
+                _stopRecording('gps');
               }
               if (mounted) {
                 setState(
@@ -269,7 +413,7 @@ class _TrackingScreenState extends State<TrackingScreen>
     if (!_recording || !mounted) return;
     final d = _draft!;
     if (d.track.length >= 10000) {
-      _pause('limite');
+      _stopRecording('limite');
       setState(
         () => _message = 'Limite de pontos atingido. Salve esta corrida.',
       );
@@ -299,26 +443,31 @@ class _TrackingScreenState extends State<TrackingScreen>
     )) {
       return;
     }
-    setState(() {
-      final previous = d.track.isEmpty ? null : d.track.last;
-      if (previous != null) {
-        final previousTime = DateTime.tryParse(previous['timestamp'] as String);
-        final currentTime = DateTime.tryParse(candidate['timestamp'] as String);
-        if (previousTime != null &&
-            currentTime != null &&
-            currentTime.isAfter(previousTime)) {
-          final distance = Geolocator.distanceBetween(
-            (previous['lat'] as num).toDouble(),
-            (previous['lng'] as num).toDouble(),
-            (candidate['lat'] as num).toDouble(),
-            (candidate['lng'] as num).toDouble(),
-          );
-          final elapsed = currentTime.difference(previousTime).inSeconds;
-          if (elapsed > 0 && distance > 250 && elapsed <= 5) {
-            return;
-          }
-        }
+    // Veículo não é corrida: o servidor recusaria o envio inteiro por causa
+    // deste par. Mas o GPS também erra — uma leitura torta isolada não pode
+    // parar a corrida de quem está correndo, e era justamente isso que o filtro
+    // de salto antigo descartava em silêncio. O que separa os dois é a
+    // insistência: um salto fora do lugar é jogado fora, e o segundo par
+    // consecutivo acima do teto encerra a gravação. Um deslocamento rápido que
+    // não tem cara de leitura torta — trem, ônibus — encerra na primeira vez.
+    if (d.track.isNotEmpty &&
+        TerritoryLoop.speedMps(d.track.last, candidate) > maxPlausibleSpeedMps) {
+      final jumped = _looksLikeBadFix(d.track.last, candidate);
+      _fastPairs = jumped ? _fastPairs + 1 : 2;
+      if (_fastPairs >= 2) {
+        _fastPairs = 0;
+        _stopRecording('velocidade');
+        setState(
+          () => _message =
+              'Você está se movendo mais rápido que uma corrida — o registro foi '
+              'pausado e este ponto não foi gravado. Estava em veículo? Salve ou '
+              'descarte a corrida na aba Corridas antes de continuar a pé.',
+        );
       }
+      return;
+    }
+    _fastPairs = 0;
+    setState(() {
       d.track.add(candidate);
       _markContested(candidate);
     });
@@ -469,7 +618,14 @@ class _TrackingScreenState extends State<TrackingScreen>
     }
   }
 
-  Future<void> _pause([String reason = 'manual']) async {    _recording = false;
+  /// A gravação para por um motivo que a pessoa não escolheu: caiu o GPS, o app
+  /// foi para segundo plano, o limite de pontos chegou, o movimento virou de
+  /// veículo. O percurso fica no aparelho e o botão passa a ser Continuar.
+  ///
+  /// Não existe pausar por escolha: uma corrida é contínua do Iniciar ao Salvar,
+  /// e a única quebra de traçado que aparece é a que o aparelho detectou.
+  Future<void> _stopRecording(String reason) async {
+    _recording = false;
     _draft?.logPause(reason);
     await _subscription?.cancel();
     _subscription = null;
@@ -477,43 +633,22 @@ class _TrackingScreenState extends State<TrackingScreen>
     if (mounted) setState(() {});
   }
 
-  /// Pausa pedida no botão com conquista ligada: a pausa em si não custa o
-  /// território, mas sair do lugar enquanto está pausado sim.
-  Future<void> _pauseWithWarning() async {
-    final draft = _draft;
-    if (draft == null || !draft.conquer || draft.track.isEmpty) {
-      await _pause();
-      return;
-    }
-    final pause = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Pausar corrida?'),
-        content: const Text(
-          'Pausar não quebra o território, desde que você retome onde parou. '
-          'Se se deslocar durante a pausa, o traçado deixa de ser contínuo e '
-          'a conquista não vale.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Continuar correndo'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Pausar mesmo assim'),
-          ),
-        ],
-      ),
-    );
-    if (pause == true) await _pause();
+  /// Termina a gravação para enviar. Não é pausa, então não entra no resumo:
+  /// antes entrava, e uma corrida com dois envios recusados mostrava pausas que
+  /// ninguém tinha feito.
+  Future<void> _endRecording() async {
+    _recording = false;
+    await _subscription?.cancel();
+    _subscription = null;
+    await _persist();
+    if (mounted) setState(() {});
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (!_recording || !mounted) return;
     if (state == AppLifecycleState.detached) {
-      _pause('app');
+      _stopRecording('app');
       if (mounted) {
         setState(
           () => _message =
@@ -530,7 +665,7 @@ class _TrackingScreenState extends State<TrackingScreen>
       _message = null;
     });
     try {
-      await _pause();
+      await _endRecording();
       final draft = _draft!;
       if (!draft.queued) {
         draft.name = _name.text.trim();
@@ -621,28 +756,45 @@ class _TrackingScreenState extends State<TrackingScreen>
     final last = track.isEmpty
         ? const ll.LatLng(-23.6489, -46.8523)
         : ll.LatLng(track.last['lat'], track.last['lng']);
+    // O pino que aparece no mapa: o último ponto gravado, e enquanto não há
+    // nenhum — o lugar onde o aparelho diz que a pessoa está.
+    final mePoint = track.isEmpty ? _here : last;
     final target = widget.target;
     final targetCenter = target == null
         ? null
         : ll.LatLng(target.center.lat, target.center.lng);
     final canEdit = d != null && !d.queued && !_busy;
+    // Sempre que haja o que jogar fora: um trajeto gravado, ou um envio já
+    // congelado. Sem isto a pessoa fica presa nesta tela com uma corrida que o
+    // servidor nunca vai aceitar, sem saída a não ser voltar e caçar o percurso
+    // na aba Corridas.
+    final canDiscard = d != null && !_busy && (track.isNotEmpty || d.queued);
     final profile = context.watch<AppState>().profile;
     final dispute = _disputeLabel;
     return Scaffold(
       appBar: AppBar(
         title: Text(_recording ? 'Corrida em andamento' : 'Sua corrida'),
       ),
-      body: Column(
+      body: Stack(
         children: [
-          Expanded(
+          Positioned.fill(
             child: Stack(
               children: [
                 FlutterMap(
                   mapController: _mapController,
                   options: MapOptions(
-                    initialCenter: targetCenter ?? last,
+                    initialCenter: targetCenter ?? _here ?? last,
                     initialZoom: 16,
-                    onMapReady: () => _mapReady = true,
+                    onMapReady: () {
+                      _mapReady = true;
+                      // O mapa nasce pronto antes de a pessoa tocar em qualquer
+                      // coisa: se a leitura do local chegou depois do primeiro
+                      // quadro, é aqui que ele vai para cima dela.
+                      final here = _here;
+                      if (here != null && track.isEmpty) {
+                        _mapController.move(here, 16);
+                      }
+                    },
                   ),
                   children: [
                     TileLayer(
@@ -717,11 +869,11 @@ class _TrackingScreenState extends State<TrackingScreen>
                           ),
                       ],
                     ),
-                    if (track.isNotEmpty)
+                    if (mePoint != null)
                       MarkerLayer(
                         markers: [
                           Marker(
-                            point: last,
+                            point: mePoint,
                             width: 24,
                             height: 24,
                             child: const Icon(
@@ -738,42 +890,108 @@ class _TrackingScreenState extends State<TrackingScreen>
                     ),
                   ],
                 ),
-                if (dispute != null)
-                  Positioned(
-                    top: 12,
-                    left: 12,
-                    right: 12,
-                    child: Card(
-                      child: ListTile(
-                        leading: const Icon(Icons.flag_outlined),
-                        title: Text(dispute),
-                      ),
+                // Os avisos vivos ficam no topo do mapa, não dentro do painel:
+                // é para cima que quem corre olha, e o painel pode estar
+                // retraído justo na hora em que a mensagem muda.
+                Positioned(
+                  top: 12,
+                  left: 12,
+                  right: 12,
+                  child: Column(
+                    children: [
+                      if (dispute != null)
+                        Card(
+                          child: ListTile(
+                            leading: const Icon(Icons.flag_outlined),
+                            title: Text(dispute),
+                          ),
+                        ),
+                      if (_targetHint(track) case final hint?)
+                        Card(
+                          child: ListTile(
+                            leading: const Icon(Icons.directions_run),
+                            title: Text(hint),
+                          ),
+                        ),
+                      if (d?.conquer ?? false)
+                        Card(
+                          child: ListTile(
+                            leading: Icon(
+                              loop.closed
+                                  ? Icons.check_circle_outline
+                                  : Icons.radio_button_unchecked,
+                              size: 18,
+                              // Laço fechado: tinta verde do brilho, não o
+                              // #22C55E do mock (sobre o fundo claro do cartão
+                              // ele fica abaixo de 3:1).
+                              color: loop.closed
+                                  ? Pal.successInk(context)
+                                  : Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
+                            ),
+                            title: Text(
+                              loop.label,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                // Volta ao próprio lugar sem ter de começar a corrida: é o gesto
+                // que responde "este mapa está me vendo?" antes do Iniciar.
+                Positioned(
+                  right: 12,
+                  bottom: 12,
+                  child: Card(
+                    margin: EdgeInsets.zero,
+                    child: IconButton(
+                      onPressed: _lookingHere ? null : _locateHere,
+                      tooltip: 'Meu local',
+                      icon: const Icon(Icons.my_location),
                     ),
                   ),
-                if (_targetHint(track) case final hint?)
-                  Positioned(
-                    top: dispute == null ? 12 : 96,
-                    left: 12,
-                    right: 12,
-                    child: Card(
-                      child: ListTile(
-                        leading: const Icon(Icons.directions_run),
-                        title: Text(hint),
-                      ),
-                    ),
-                  ),
+                ),
               ],
             ),
           ),
-          Flexible(
-            child: SingleChildScrollView(
+          // O mapa é o fundo da tela inteira e o painel sobe sobre ele: a
+          // divisão fixa ao meio deixava os números e as ações espremidos, e o
+          // resto das escolhas só existia rolando uma lista curta.
+          DraggableScrollableSheet(
+            initialChildSize: 0.55,
+            minChildSize: 0.42,
+            maxChildSize: 0.92,
+            builder: (context, sheetController) => Material(
+              elevation: 8,
+              color: Theme.of(context).colorScheme.surface,
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              ),
               child: SafeArea(
                 top: false,
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
+                child: Column(
+                  children: [
+                    // Alça de arrastar, na tinta do tema: é o convite para subir
+                    // o painel e ver o resto das escolhas.
+                    Container(
+                      width: 32,
+                      height: 4,
+                      margin: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant
+                            .withValues(alpha: 0.4),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    // Fixo no topo do painel: os números e as ações, sempre à
+                    // mão. O que é escolha desce na lista.
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
                       Text(
                         '${(meters / 1000).toStringAsFixed(2)} km  •  ${seconds ~/ 60}min ${seconds % 60}s',
                         style: Theme.of(context).textTheme.titleLarge,
@@ -791,47 +1009,6 @@ class _TrackingScreenState extends State<TrackingScreen>
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           child: Text(_message!, textAlign: TextAlign.center),
-                        ),
-                      if ((_draft?.pauses.isNotEmpty ?? false))
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Text(
-                            _pauseSummary(_draft!.pauses),
-                            textAlign: TextAlign.center,
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ),
-                      if (d?.conquer ?? false)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Icon(
-                                loop.closed
-                                    ? Icons.check_circle_outline
-                                    : Icons.radio_button_unchecked,
-                                size: 18,
-                                // Laço fechado: tinta verde do brilho, não o
-                                // #22C55E do mock (sobre o fundo claro do
-                                // painel ele fica abaixo de 3:1).
-                                color: loop.closed
-                                    ? Pal.successInk(context)
-                                    : Theme.of(
-                                        context,
-                                      ).colorScheme.onSurfaceVariant,
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  loop.label,
-                                  textAlign: TextAlign.center,
-                                  style: Theme.of(context).textTheme.bodySmall,
-                                ),
-                              ),
-                            ],
-                          ),
                         ),
                       if (_permissionBlocked && !_recording)
                         Padding(
@@ -863,6 +1040,61 @@ class _TrackingScreenState extends State<TrackingScreen>
                             'Sem sinal de GPS. Ative a localização no emulador ou no aparelho para registrar a corrida.',
                             textAlign: TextAlign.center,
                             style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                        ),
+                      // As ações ficam com os números, não no fim do painel: é
+                      // aqui que a pessoa decide correr, e o resto (nome,
+                      // conquista, desafio, equipe) é escolha que vem depois.
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (canEdit && !_recording)
+                            OutlinedButton.icon(
+                              onPressed: _starting ? null : _start,
+                              icon: const Icon(Icons.play_arrow),
+                              label: Text(
+                                track.isEmpty ? 'Iniciar' : 'Continuar',
+                              ),
+                            ),
+                          if (canEdit && !_recording) const SizedBox(width: 8),
+                          FilledButton.icon(
+                            onPressed: _busy || track.length < 2 ? null : _finish,
+                            icon: const Icon(Icons.save_outlined),
+                            label: Text(
+                              _busy
+                                  ? 'Salvando…'
+                                  : d?.queued == true
+                                  ? 'Tentar enviar novamente'
+                                  : 'Salvar corrida',
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (canDiscard)
+                        TextButton.icon(
+                          onPressed: _discard,
+                          icon: const Icon(Icons.delete_outline),
+                          label: const Text('Descartar corrida'),
+                        ),
+                      const Text(
+                        'Mantenha o app aberto durante a gravação. Envie em até 7 dias.',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: ListView(
+                        controller: sheetController,
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                        children: [
+                      if (_draft?.pauses.isNotEmpty ?? false)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Text(
+                            _pauseSummary(_draft!.pauses),
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.bodySmall,
                           ),
                         ),
                       TextField(
@@ -992,39 +1224,10 @@ class _TrackingScreenState extends State<TrackingScreen>
                                 }
                               : null,
                         ),
-                      if (canEdit)
-                        OutlinedButton.icon(
-                           onPressed: _starting
-                               ? null
-                               : (_recording ? _pauseWithWarning : _start),
-                          icon: Icon(
-                            _recording ? Icons.pause : Icons.play_arrow,
-                          ),
-                          label: Text(
-                            _recording
-                                ? 'Pausar'
-                                : track.isEmpty
-                                ? 'Iniciar'
-                                : 'Continuar',
-                          ),
-                        ),
-                      FilledButton.icon(
-                        onPressed: _busy || track.length < 2 ? null : _finish,
-                        icon: const Icon(Icons.save_outlined),
-                        label: Text(
-                          _busy
-                              ? 'Salvando…'
-                              : d?.queued == true
-                              ? 'Tentar enviar novamente'
-                              : 'Salvar corrida',
-                        ),
+                        ],
                       ),
-                      const Text(
-                        'Mantenha o app aberto durante a gravação. Envie em até 7 dias.',
-                        style: TextStyle(fontSize: 12),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
