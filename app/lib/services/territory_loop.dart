@@ -1,5 +1,12 @@
 import 'dart:math' as math;
 
+/// Teto de velocidade que o servidor aceita entre dois pontos do trajeto
+/// (`max_plausible_speed_mps`, em `backend/app/core/config.py`): ~30 km/h,
+/// generoso para corrida e sprint. Acima disso o movimento é de veículo, e o
+/// `POST /runs` recusa a corrida inteira (RNF17). O aparelho percebe no instante
+/// em que o ponto chega — não tem sentido gravar para reclamar só no envio.
+const double maxPlausibleSpeedMps = 8.3;
+
 /// Espelho das regras de fechamento de laço do backend
 /// (`backend/app/geometry.py`). O corredor precisa saber em tempo real se o
 /// trajeto vai virar território; se estes números divergirem do servidor, a
@@ -93,6 +100,18 @@ class TerritoryLoop {
           (_lng(b) * mPerDegLng) * (_lat(a) * mPerDegLat);
     }
     return sum.abs() / 2;
+  }
+
+  /// Velocidade média que o servidor calcularia entre dois pontos do trajeto.
+  /// Zero quando o intervalo não é utilizável (sem horário, ou tempo parado),
+  /// para que a chamada decida só pelo que realmente é movimento rápido.
+  static double speedMps(Map<String, dynamic> from, Map<String, dynamic> to) {
+    final t1 = DateTime.tryParse('${from['timestamp']}');
+    final t2 = DateTime.tryParse('${to['timestamp']}');
+    if (t1 == null || t2 == null) return 0;
+    final seconds = t2.difference(t1).inSeconds;
+    if (seconds <= 0) return 0;
+    return _distanceM(_lat(from), _lng(from), _lat(to), _lng(to)) / seconds;
   }
 
   static double _tolerance(double? startAccuracy, double? endAccuracy) {    if (startAccuracy == null || endAccuracy == null) return floorToleranceM;

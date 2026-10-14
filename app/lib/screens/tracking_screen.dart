@@ -26,6 +26,7 @@ String _pauseSummary(List<Map<String, String>> pauses) {
     'gps' => 'GPS',
     'app' => 'app',
     'limite' => 'limite',
+    'velocidade' => 'veículo',
     _ => 'manual',
   };
   String time(String iso) {
@@ -203,6 +204,19 @@ class _TrackingScreenState extends State<TrackingScreen>
     }
   }
 
+  Future<Position?> _firstFixOrNull() async {
+    try {
+      return await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.best,
+          timeLimit: Duration(seconds: 8),
+        ),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> _start() async {
     if (_starting || _recording || _draft == null || _draft!.queued) return;
     setState(() => _starting = true);
@@ -221,6 +235,18 @@ class _TrackingScreenState extends State<TrackingScreen>
         _permissionBlocked = true;
         throw ApiException(
           'Permita o acesso à localização para registrar a corrida.',
+        );
+      }
+      if (!mounted) return;
+      // Começar dentro de um trem não é começar uma corrida. Melhor esforço:
+      // sem leitura de velocidade (plataforma não informa, ou o sinal demora), a
+      // porta não bloqueia ninguém — o par de pontos durante a gravação continua
+      // sendo a regra que vale.
+      final first = await _firstFixOrNull();
+      if (first != null && first.speed > maxPlausibleSpeedMps) {
+        throw ApiException(
+          'Você está se movendo rápido demais para começar uma corrida. '
+          'Pare, espere alguns segundos e comece de novo.',
         );
       }
       if (!mounted) return;
@@ -293,6 +319,20 @@ class _TrackingScreenState extends State<TrackingScreen>
       'segment': d.segment,
       'accuracy': position.accuracy,
     };
+    // Veículo não é corrida: o servidor recusaria o envio inteiro por causa
+    // deste par de pontos. O aparelho para de gravar na hora em que percebe,
+    // em vez de coletar uma corrida que não pode ser salva.
+    if (d.track.isNotEmpty &&
+        TerritoryLoop.speedMps(d.track.last, candidate) > maxPlausibleSpeedMps) {
+      _pause('velocidade');
+      setState(
+        () => _message =
+            'Você está se movendo mais rápido que uma corrida — o registro foi '
+            'pausado e este ponto não foi gravado. Estava em veículo? Salve ou '
+            'descarte a corrida na aba Corridas antes de continuar a pé.',
+      );
+      return;
+    }
     if (!TrackingScreenRouteProcessor.isUsablePoint(
       candidate,
       accuracyMeters: 50,

@@ -17,6 +17,12 @@ import 'package:runover_app/theme.dart';
 import 'profile_screen_test.dart' show profileData;
 
 class _FakeGeo extends GeolocatorPlatform {
+  _FakeGeo({this.positions = const []});
+
+  /// Posições que o stream entrega depois do Iniciar — para testar o que a
+  /// tela faz com um par de pontos de veículo.
+  final List<Position> positions;
+
   @override
   Future<bool> isLocationServiceEnabled() async => true;
 
@@ -34,7 +40,7 @@ class _FakeGeo extends GeolocatorPlatform {
 
   @override
   Stream<Position> getPositionStream({LocationSettings? locationSettings}) =>
-      const Stream.empty();
+      Stream.fromIterable(positions);
 }
 
 Position _fix() => Position(
@@ -96,7 +102,11 @@ void main() {
     WidgetTester tester, {
     Territory? challengeTarget,
     Map<String, dynamic>? draft,
+    List<Position>? positions,
   }) async {
+    if (positions != null) {
+      GeolocatorPlatform.instance = _FakeGeo(positions: positions);
+    }
     SharedPreferences.setMockInitialValues({
       'runover_drafts_profile-test': jsonEncode([draft ?? draftJson()]),
     });
@@ -218,7 +228,45 @@ void main() {
     expect(find.textContaining('Desafio declarado'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('movimento de veículo pausa o registro em vez de gravar',
+      (tester) async {
+    // A barra de ação fica abaixo dos 600 px da dobra de teste: sem janela alta
+    // o toque em "Iniciar" cai fora da tela e a gravação nem começa.
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await open(
+      tester,
+      draft: draftJson()..['track'] = [],
+      positions: [_fixAt(0), _fixAt(5, latStep: 0.0018)],
+    );
+    await tester.tap(find.text('Iniciar'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('mais rápido que uma corrida'), findsOneWidget);
+    // O ponto de trem não entra no trajeto: com só o primeiro ponto gravado a
+    // corrida continua em 0,00 km, e a pausa aparece com o motivo.
+    expect(find.textContaining('0.00 km'), findsOneWidget);
+    expect(find.textContaining('Pausas (1): veículo'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }
+
+/// ~200 m em 5 s = 40 m/s: acima do teto que o servidor usa para decidir que o
+/// movimento não é de uma corrida (`max_plausible_speed_mps`).
+Position _fixAt(int second, {double latStep = 0}) => Position(
+  longitude: -46.8523,
+  latitude: -23.6489 + latStep,
+  timestamp: DateTime.utc(2026, 10, 13, 18, 0, second),
+  accuracy: 10,
+  altitude: 0,
+  altitudeAccuracy: 0,
+  heading: 0,
+  headingAccuracy: 0,
+  speed: 0,
+  speedAccuracy: 0,
+);
 
 Territory _rivalTerritory() => Territory.fromJson({
   'id': 'territorio-alvo',
