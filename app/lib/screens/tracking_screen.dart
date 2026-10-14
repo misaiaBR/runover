@@ -100,25 +100,6 @@ class _TrackingScreenState extends State<TrackingScreen>
   /// uma leitura; dois são movimento de veículo.
   int _fastPairs = 0;
 
-  /// O GPS erra assim: um ponto longe demais, rápido demais, e o próximo volta
-  /// para o lugar. Não é deslocamento — é leitura torta.
-  bool _looksLikeBadFix(
-    Map<String, dynamic> previous,
-    Map<String, dynamic> next,
-  ) {
-    final previousTime = DateTime.tryParse('${previous['timestamp']}');
-    final currentTime = DateTime.tryParse('${next['timestamp']}');
-    if (previousTime == null || currentTime == null) return false;
-    final elapsed = currentTime.difference(previousTime).inSeconds;
-    if (elapsed <= 0 || elapsed > 5) return false;
-    return Geolocator.distanceBetween(
-      (previous['lat'] as num).toDouble(),
-      (previous['lng'] as num).toDouble(),
-      (next['lat'] as num).toDouble(),
-      (next['lng'] as num).toDouble(),
-    ) >
-        250;
-  }
   final _name = TextEditingController();
 
   @override
@@ -452,7 +433,10 @@ class _TrackingScreenState extends State<TrackingScreen>
     // não tem cara de leitura torta — trem, ônibus — encerra na primeira vez.
     if (d.track.isNotEmpty &&
         TerritoryLoop.speedMps(d.track.last, candidate) > maxPlausibleSpeedMps) {
-      final jumped = _looksLikeBadFix(d.track.last, candidate);
+      final jumped = TrackingScreenRouteProcessor.looksLikeBadFix(
+        d.track.last,
+        candidate,
+      );
       _fastPairs = jumped ? _fastPairs + 1 : 2;
       if (_fastPairs >= 2) {
         _fastPairs = 0;

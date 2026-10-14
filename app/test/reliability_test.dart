@@ -243,6 +243,41 @@ void main() {
     expect(filtered.last['lat'], closeTo(-23.55, 0.0001));
   });
 
+  test('o salto do GPS é julgado pelo intervalo fracionário', () {
+    // 0,9 s e 5,9 s eram truncados para 0 e 5. O salto de 0,9 s deixava de ser
+    // leitura torta e encerrava a gravação na primeira leitura torta; o
+    // deslocamento de 5,9 s era jogado fora como salto.
+    const base = {
+      'lat': 0.0,
+      'lng': 0.0,
+      'timestamp': '2026-10-13T18:00:00.000Z',
+    };
+    const quaseUmSegundo = {
+      'lat': 0.0025, // ~278 m em 0,9 s
+      'lng': 0.0,
+      'timestamp': '2026-10-13T18:00:00.900Z',
+    };
+    const quaseSeisSegundos = {
+      'lat': 0.0025, // ~278 m em 5,9 s
+      'lng': 0.0,
+      'timestamp': '2026-10-13T18:00:05.900Z',
+    };
+    const perto = {
+      'lat': 0.0005, // ~56 m em 2 s: corrida normal
+      'lng': 0.0,
+      'timestamp': '2026-10-13T18:00:02.000Z',
+    };
+    expect(
+      TrackingScreenRouteProcessor.looksLikeBadFix(base, quaseUmSegundo),
+      isTrue,
+    );
+    expect(
+      TrackingScreenRouteProcessor.looksLikeBadFix(base, quaseSeisSegundos),
+      isFalse,
+    );
+    expect(TrackingScreenRouteProcessor.looksLikeBadFix(base, perto), isFalse);
+  });
+
   test(
     'route simplifier keeps meaningful turns and removes redundant points',
     () {
