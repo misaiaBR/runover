@@ -103,13 +103,16 @@ class TerritoryLoop {
   }
 
   /// Velocidade média que o servidor calcularia entre dois pontos do trajeto.
-  /// Zero quando o intervalo não é utilizável (sem horário, ou tempo parado),
-  /// para que a chamada decida só pelo que realmente é movimento rápido.
+  /// Microssegundos, não segundos inteiros: o backend divide pela duração
+  /// fracionária, e truncar aqui daria velocidade zero a um intervalo de 0,9 s
+  /// (o ponto passaria e o envio seria recusado depois) e velocidade inflada a
+  /// 1,9 s (a corrida pararia sem motivo). Zero quando o intervalo não é
+  /// utilizável, para a chamada decidir só pelo que é movimento rápido.
   static double speedMps(Map<String, dynamic> from, Map<String, dynamic> to) {
     final t1 = DateTime.tryParse('${from['timestamp']}');
     final t2 = DateTime.tryParse('${to['timestamp']}');
     if (t1 == null || t2 == null) return 0;
-    final seconds = t2.difference(t1).inSeconds;
+    final seconds = t2.difference(t1).inMicroseconds / 1000000;
     if (seconds <= 0) return 0;
     return _distanceM(_lat(from), _lng(from), _lat(to), _lng(to)) / seconds;
   }

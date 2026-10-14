@@ -160,4 +160,33 @@ void main() {
     // Sem intervalo utilizável não há velocidade a julgar.
     expect(TerritoryLoop.speedMps(base, base), 0);
   });
+
+  test('o intervalo é fracionário, como no servidor', () {
+    // O backend divide pela duração em segundos com casas decimais. Truncar
+    // aqui dava velocidade zero a 0,9 s (o ponto passava e o envio morria
+    // depois) e velocidade inflada a 1,9 s (parava quem corre de verdade).
+    const base = {
+      'lat': 0.0,
+      'lng': 0.0,
+      'timestamp': '2026-10-13T18:00:00.000Z',
+    };
+    const quaseUmSegundo = {
+      'lat': 0.0018, // ~200 m em 0,9 s
+      'lng': 0.0,
+      'timestamp': '2026-10-13T18:00:00.900Z',
+    };
+    const quaseDoisSegundos = {
+      'lat': 0.000125, // ~13,9 m em 1,9 s = 7,3 m/s: corrida normal
+      'lng': 0.0,
+      'timestamp': '2026-10-13T18:00:01.900Z',
+    };
+    expect(
+      TerritoryLoop.speedMps(base, quaseUmSegundo),
+      greaterThan(maxPlausibleSpeedMps),
+    );
+    expect(
+      TerritoryLoop.speedMps(base, quaseDoisSegundos),
+      lessThan(maxPlausibleSpeedMps),
+    );
+  });
 }
