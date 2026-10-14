@@ -224,6 +224,65 @@ class _TrackingScreenState extends State<TrackingScreen>
     }
   }
 
+  /// Joga o percurso fora deste aparelho e deixa a tela pronta para outra corrida.
+  /// Num envio congelado o aviso é explícito: a corrida pode já ter chegado ao
+  /// servidor, e descartar não desfaz o que foi salvo lá.
+  Future<void> _discard() async {
+    final draft = _draft;
+    final store = _store;
+    if (draft == null || store == null || _busy) return;
+    final sure = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Descartar esta corrida?'),
+        content: Text(
+          draft.queued
+              ? 'O último envio pode ter chegado ao servidor — confira na aba '
+                    'Corridas antes de apagar. Os ${draft.track.length} pontos '
+                    'deste aparelho serão apagados.'
+              : draft.track.isEmpty
+              ? 'Este percurso ainda não tem pontos gravados.'
+              : '${draft.track.length} pontos de GPS serão apagados deste '
+                    'aparelho. Corridas já enviadas não são afetadas.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Manter'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Descartar'),
+          ),
+        ],
+      ),
+    );
+    if (sure != true || !mounted) return;
+    _recording = false;
+    await _subscription?.cancel();
+    _subscription = null;
+    try {
+      await store.remove(draft.id);
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _message =
+              'Não foi possível apagar o percurso neste aparelho.',
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
+    setState(() {
+      _draft = RunDraft.create();
+      _contested.clear();
+      _nearbyMarks = null;
+      _challengeDeclined = false;
+      _name.clear();
+      _message = 'Percurso descartado. Toque em Iniciar para começar outra.';
+    });
+  }
+
   /// Lê onde o aparelho está e centraliza o mapa ali. Melhor esforço: sem
   /// permissão ou sem sinal a tela continua funcionando como antes, só não mostra
   /// o ponto — e o Iniciar continua pedindo a permissão com a mensagem própria.
@@ -689,6 +748,11 @@ class _TrackingScreenState extends State<TrackingScreen>
         ? null
         : ll.LatLng(target.center.lat, target.center.lng);
     final canEdit = d != null && !d.queued && !_busy;
+    // Sempre que haja o que jogar fora: um trajeto gravado, ou um envio já
+    // congelado. Sem isto a pessoa fica presa nesta tela com uma corrida que o
+    // servidor nunca vai aceitar, sem saída a não ser voltar e caçar o percurso
+    // na aba Corridas.
+    final canDiscard = d != null && !_busy && (track.isNotEmpty || d.queued);
     final profile = context.watch<AppState>().profile;
     final dispute = _disputeLabel;
     return Scaffold(
@@ -951,6 +1015,44 @@ class _TrackingScreenState extends State<TrackingScreen>
                             style: Theme.of(context).textTheme.bodyMedium,
                           ),
                         ),
+                      // As ações ficam com os números, não no fim do painel: é
+                      // aqui que a pessoa decide correr, e o resto (nome,
+                      // conquista, desafio, equipe) é escolha que vem depois.
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (canEdit && !_recording)
+                            OutlinedButton.icon(
+                              onPressed: _starting ? null : _start,
+                              icon: const Icon(Icons.play_arrow),
+                              label: Text(
+                                track.isEmpty ? 'Iniciar' : 'Continuar',
+                              ),
+                            ),
+                          if (canEdit && !_recording) const SizedBox(width: 8),
+                          FilledButton.icon(
+                            onPressed: _busy || track.length < 2 ? null : _finish,
+                            icon: const Icon(Icons.save_outlined),
+                            label: Text(
+                              _busy
+                                  ? 'Salvando…'
+                                  : d?.queued == true
+                                  ? 'Tentar enviar novamente'
+                                  : 'Salvar corrida',
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (canDiscard)
+                        TextButton.icon(
+                          onPressed: _discard,
+                          icon: const Icon(Icons.delete_outline),
+                          label: const Text('Descartar corrida'),
+                        ),
+                      const Text(
+                        'Mantenha o app aberto durante a gravação. Envie em até 7 dias.',
+                        style: TextStyle(fontSize: 12),
+                      ),
                       TextField(
                         controller: _name,
                         enabled: canEdit,
@@ -1078,32 +1180,6 @@ class _TrackingScreenState extends State<TrackingScreen>
                                 }
                               : null,
                         ),
-                      // Não há botão de pausar: a corrida é contínua do Iniciar
-                      // ao Salvar, e o único motivo que aparece no resumo de
-                      // pausas é o que o aparelho detectou sozinho.
-                      if (canEdit && !_recording)
-                        OutlinedButton.icon(
-                          onPressed: _starting ? null : _start,
-                          icon: const Icon(Icons.play_arrow),
-                          label: Text(
-                            track.isEmpty ? 'Iniciar' : 'Continuar',
-                          ),
-                        ),
-                      FilledButton.icon(
-                        onPressed: _busy || track.length < 2 ? null : _finish,
-                        icon: const Icon(Icons.save_outlined),
-                        label: Text(
-                          _busy
-                              ? 'Salvando…'
-                              : d?.queued == true
-                              ? 'Tentar enviar novamente'
-                              : 'Salvar corrida',
-                        ),
-                      ),
-                      const Text(
-                        'Mantenha o app aberto durante a gravação. Envie em até 7 dias.',
-                        style: TextStyle(fontSize: 12),
-                      ),
                     ],
                   ),
                 ),

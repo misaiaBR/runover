@@ -274,6 +274,31 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('descartar apaga o percurso e libera a tela para outra corrida',
+      (tester) async {
+    await open(tester);
+    await tester.ensureVisible(find.text('Descartar corrida'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Descartar corrida'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Descartar esta corrida?'), findsOneWidget);
+    expect(find.textContaining('pontos de GPS serão apagados'), findsOneWidget);
+
+    await tester.tap(find.text('Descartar'));
+    await tester.runAsync(() => Future.delayed(const Duration(seconds: 2)));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Percurso descartado'), findsOneWidget);
+    // Sem trajeto, o botão volta a ser Iniciar: a corrida nova não herda a que
+    // foi jogada fora.
+    expect(find.text('Iniciar'), findsOneWidget);
+    expect(find.text('Descartar corrida'), findsNothing);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('runover_drafts_profile-test'), '[]');
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('movimento de veículo pausa o registro em vez de gravar',
       (tester) async {
     // A barra de ação fica abaixo dos 600 px da dobra de teste: sem janela alta
