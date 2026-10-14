@@ -16,6 +16,10 @@ import 'package:runover_app/theme.dart';
 
 import 'profile_screen_test.dart' show profileData;
 
+/// Quantas vezes a tela pediu uma leitura de localização. É como o teste sabe que
+/// o mapa se localizou ao abrir, e não só depois do Iniciar.
+int locationReads = 0;
+
 class _FakeGeo extends GeolocatorPlatform {
   _FakeGeo({this.positions = const [], this.streamError = false});
 
@@ -39,8 +43,10 @@ class _FakeGeo extends GeolocatorPlatform {
       LocationPermission.whileInUse;
 
   @override
-  Future<Position> getCurrentPosition({LocationSettings? locationSettings}) async =>
-      _fix();
+  Future<Position> getCurrentPosition({LocationSettings? locationSettings}) async {
+    locationReads++;
+    return _fix();
+  }
 
   @override
   Stream<Position> getPositionStream({
@@ -70,6 +76,7 @@ void main() {
   late GeolocatorPlatform original;
 
   setUp(() {
+    locationReads = 0;
     original = GeolocatorPlatform.instance;
     GeolocatorPlatform.instance = _FakeGeo();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -251,6 +258,19 @@ void main() {
     expect(rows.single['target_territory_id'], 'territorio-alvo');
     expect(rows.single['conquer'], isTrue);
     expect(find.textContaining('Desafio declarado'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('o mapa abre mostrando onde eu estou, sem esperar o Iniciar',
+      (tester) async {
+    await open(tester, draft: draftJson()..['track'] = []);
+    await tester.pumpAndSettle();
+
+    // Sem isto a tela abria num ponto fixo do mapa e só se mexia depois de
+    // começar a gravar — nenhuma prova de que estava vendo o lugar da pessoa.
+    expect(locationReads, greaterThan(0));
+    // O pino do meu local e o botão de voltar a ele.
+    expect(find.byIcon(Icons.my_location), findsNWidgets(2));
     expect(tester.takeException(), isNull);
   });
 

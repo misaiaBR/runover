@@ -89,6 +89,12 @@ class _TrackingScreenState extends State<TrackingScreen>
   bool _challengeDeclined = false;
   final _mapController = MapController();
   bool _mapReady = false;
+
+  /// Onde o aparelho está, lido assim que a tela abre. Antes o mapa abria num
+  /// ponto fixo e só se mexia quando a gravação começava — a tela não dava
+  /// nenhuma prova de que estava vendo o lugar de quem corre.
+  ll.LatLng? _here;
+  bool _lookingHere = false;
   final _name = TextEditingController();
 
   @override
@@ -157,6 +163,7 @@ class _TrackingScreenState extends State<TrackingScreen>
             ? 'Corrida recuperada. Continue ou salve o percurso já registrado.'
             : 'Toque em Iniciar para registrar seu percurso.';
       });
+      unawaited(_locateHere());
       try {
         final team = await state.api.getMyTeam();
         if (mounted) setState(() => _team = team);
@@ -214,6 +221,33 @@ class _TrackingScreenState extends State<TrackingScreen>
       );
     } catch (_) {
       return null;
+    }
+  }
+
+  /// Lê onde o aparelho está e centraliza o mapa ali. Melhor esforço: sem
+  /// permissão ou sem sinal a tela continua funcionando como antes, só não mostra
+  /// o ponto — e o Iniciar continua pedindo a permissão com a mensagem própria.
+  Future<void> _locateHere() async {
+    if (_lookingHere) return;
+    setState(() => _lookingHere = true);
+    try {
+      final raw = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.best,
+          timeLimit: Duration(seconds: 15),
+        ),
+      );
+      final pos = await _refiner.refine(raw);
+      if (!mounted) return;
+      setState(() {
+        _here = ll.LatLng(pos.latitude, pos.longitude);
+        _lookingHere = false;
+      });
+      if (_mapReady && (_draft?.track.isEmpty ?? true)) {
+        _mapController.move(_here!, 16);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _lookingHere = false);
     }
   }
 
@@ -647,6 +681,9 @@ class _TrackingScreenState extends State<TrackingScreen>
     final last = track.isEmpty
         ? const ll.LatLng(-23.6489, -46.8523)
         : ll.LatLng(track.last['lat'], track.last['lng']);
+    // O pino que aparece no mapa: o último ponto gravado, e enquanto não há
+    // nenhum — o lugar onde o aparelho diz que a pessoa está.
+    final mePoint = track.isEmpty ? _here : last;
     final target = widget.target;
     final targetCenter = target == null
         ? null
@@ -666,9 +703,18 @@ class _TrackingScreenState extends State<TrackingScreen>
                 FlutterMap(
                   mapController: _mapController,
                   options: MapOptions(
-                    initialCenter: targetCenter ?? last,
+                    initialCenter: targetCenter ?? _here ?? last,
                     initialZoom: 16,
-                    onMapReady: () => _mapReady = true,
+                    onMapReady: () {
+                      _mapReady = true;
+                      // O mapa nasce pronto antes de a pessoa tocar em qualquer
+                      // coisa: se a leitura do local chegou depois do primeiro
+                      // quadro, é aqui que ele vai para cima dela.
+                      final here = _here;
+                      if (here != null && track.isEmpty) {
+                        _mapController.move(here, 16);
+                      }
+                    },
                   ),
                   children: [
                     TileLayer(
@@ -743,11 +789,11 @@ class _TrackingScreenState extends State<TrackingScreen>
                           ),
                       ],
                     ),
-                    if (track.isNotEmpty)
+                    if (mePoint != null)
                       MarkerLayer(
                         markers: [
                           Marker(
-                            point: last,
+                            point: mePoint,
                             width: 24,
                             height: 24,
                             child: const Icon(
@@ -788,6 +834,20 @@ class _TrackingScreenState extends State<TrackingScreen>
                       ),
                     ),
                   ),
+                // Volta ao próprio lugar sem ter de começar a corrida: é o gesto
+                // que responde "este mapa está me vendo?" antes do Iniciar.
+                Positioned(
+                  right: 12,
+                  bottom: 12,
+                  child: Card(
+                    margin: EdgeInsets.zero,
+                    child: IconButton(
+                      onPressed: _lookingHere ? null : _locateHere,
+                      tooltip: 'Meu local',
+                      icon: const Icon(Icons.my_location),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
