@@ -45,7 +45,11 @@ Map<String, dynamic> teamData({bool admin = true}) => {
   'equipped_name_style': null,
 };
 
-List<Map<String, dynamic>> teamCatalogData() => [
+/// Catálogo da loja da equipe que o `MockClient` devolve. `extra` entra no fim
+/// da lista: os índices que os outros casos usam continuam os mesmos.
+List<Map<String, dynamic>> teamCatalogData({
+  List<Map<String, dynamic>> extra = const [],
+}) => [
   {
     'id': 'team_frame_ferro',
     'category': 'frame',
@@ -67,6 +71,7 @@ List<Map<String, dynamic>> teamCatalogData() => [
       'colors': ['#92400E', '#F59E0B'],
     },
   },
+  ...extra,
 ];
 
 Map<String, dynamic> teamInventoryData({
@@ -133,6 +138,7 @@ void main() {
     bool admin = true,
     List<String> owned = const [],
     String? equippedFrame,
+    List<Map<String, dynamic>> extra = const [],
   }) async {
     final calls = [];
     var ownedNow = List.of(owned);
@@ -165,7 +171,10 @@ void main() {
         }
         if (request.method == 'GET' && path == '/shop/catalog') {
           expect(request.url.queryParameters['scope'], 'team');
-          return http.Response(jsonEncode(teamCatalogData()), 200);
+          return http.Response(
+            jsonEncode(teamCatalogData(extra: extra)),
+            200,
+          );
         }
         if (request.method == 'POST' &&
             path == '/teams/team-test/purchase') {
@@ -239,6 +248,44 @@ void main() {
       find.text('Só o dono ou admins compram para a equipe.'),
       findsOneWidget,
     );
+    expect(tester.takeException(), isNull);
+  });
+
+  // A ficha de detalhes do pacote é a outra boca do "Inclui": um `grants` que a
+  // loja da equipe não conhece fica de fora em vez de virar id na tela.
+  testWidgets('a ficha do pacote da equipe não mostra id interno', (
+    tester,
+  ) async {
+    // A dobra de teste é curta e a lista é preguiçosa: linha do pacote só
+    // existe com janela alta.
+    tester.view.physicalSize = const Size(560, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await openTeamShop(
+      tester,
+      extra: [
+        {
+          'id': 'team_bundle_cofre',
+          'category': 'bundle',
+          'name': 'Cofre da equipe',
+          'price': 12000,
+          'scope': 'team',
+          'payload': {
+            'animated': false,
+            'grants': ['team_frame_ferro', 'avatar_galeria_001'],
+          },
+        },
+      ],
+    );
+
+    await tester.tap(find.text('Cofre da equipe'));
+    await settle(tester);
+
+    expect(find.text('Inclui'), findsOneWidget);
+    // Uma linha na vitrine, outra dentro da ficha.
+    expect(find.text('Moldura ferro da equipe'), findsNWidgets(2));
+    expect(find.textContaining('avatar_galeria_001'), findsNothing);
+    expect(find.textContaining('team_frame_ferro'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 

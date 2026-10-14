@@ -21,6 +21,14 @@ String? _previewUrl(WidgetTester tester) {
   return image is NetworkImage ? image.url : null;
 }
 
+/// A Loja da equipe tem vitrine em loop (moldura pulsando, `Breathe`):
+/// `pumpAndSettle` nunca termina ali. São quadros com duração, sempre.
+Future<void> _frames(WidgetTester tester, {int vezes = 8}) async {
+  for (var i = 0; i < vezes; i++) {
+    await tester.pump(const Duration(milliseconds: 120));
+  }
+}
+
 void main() {
   testWidgets('o bloco de perfil não tem campo de foto nem avatar local', (
     tester,
@@ -103,6 +111,52 @@ void main() {
     // A folha fecha e a prévia da tela já mostra o emblema novo.
     expect(find.text('Escolha o emblema'), findsNothing);
     expect(_previewUrl(tester), _estandarteUrl);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('voltar da Loja da equipe atualiza a prévia do emblema', (
+    tester,
+  ) async {
+    final calls = await openTeamSettings(
+      tester,
+      teamSettingsJson(equippedAvatar: 'team_avatar_coroa'),
+      routed: true,
+    );
+    expect(_previewUrl(tester), _coroaUrl);
+
+    // A loja inteira, aberta pela rota da lista — não a folha do emblema.
+    await scrollTo(tester, 'Loja da equipe');
+    await tester.tap(find.text('Loja da equipe'));
+    await _frames(tester);
+    expect(find.text('COFRE · RUNOVER'), findsOneWidget);
+
+    await tester.tap(find.text('4.000'));
+    await _frames(tester, vezes: 12);
+    expect(find.text('Equipar'), findsOneWidget);
+    await tester.tap(find.text('Equipar'));
+    await _frames(tester, vezes: 12);
+    expect(
+      calls.lastEquip,
+      {'category': 'avatar', 'item_id': 'team_avatar_estandarte'},
+    );
+
+    // Volta pelos ajustes, como o botão de voltar faz.
+    tester.state<NavigatorState>(find.byType(Navigator).last).pop();
+    for (var i = 0; i < 12 && find.text('COFRE · RUNOVER').evaluate().isNotEmpty; i++) {
+      await tester.pump(const Duration(milliseconds: 120));
+    }
+    expect(find.text('COFRE · RUNOVER'), findsNothing);
+    // A recarga da prévia é pedida à rede depois do retorno; os quadros acima
+    // não bastam porque a rota ainda estava fechando.
+    await _frames(tester, vezes: 6);
+
+    // O emblema que a equipe equipou na loja é o rosto dos ajustes agora.
+    expect(_previewUrl(tester), _estandarteUrl);
+    // E foi lido do servidor depois do retorno, não adivinhado na tela.
+    expect(
+      calls.requests.where((r) => r == 'GET /teams/team-1/inventory').length,
+      greaterThan(2),
+    );
     expect(tester.takeException(), isNull);
   });
 

@@ -141,21 +141,32 @@ class _FramedAvatarState extends State<FramedAvatar>
     _applyClock();
   }
 
+  /// O relógio aceso agora: período e sentido. Guarda o `repeat()` de quem só
+  /// reconstruiu a tela.
+  ({Duration period, bool reverse})? _clock;
+
   /// Acende ou apaga o relógio do anel. Famílias que giram (metal, neon,
   /// partículas, falha) rodam em avanço contínuo; o anel simples de cor
   /// continua o pulso de ida e volta que sempre teve.
   void _applyClock() {
     if (!_moves) {
       _controller.stop();
+      _clock = null;
       return;
     }
-    // Item trocado na mesma tela: `repeat()` grava o período no instante em
-    // que é chamado, então mexer só na duração deixaria o anel respirando no
-    // ritmo do item anterior. Reiniciar mantém o valor atual e adota o pulso
-    // do patamar novo.
+    // Reacender é preciso quando o ritmo muda: `repeat()` grava o período no
+    // instante em que é chamado, então trocar de item mexendo só na duração
+    // deixaria o anel respirando no pulso do patamar anterior. Reacender sem
+    // necessidade também tem custo — `repeat()` recomeça a perna de ida, o que
+    // num `reverse: true` inverte o pulso no meio dele. O perfil reconstrói a
+    // cada `context.watch<AppState>()` e cada `FutureBuilder`, então a guarda é
+    // o que separa "trocou de moldura" de "a tela pintou de novo".
+    final next = (period: _period, reverse: _family == null);
+    if (_clock == next && _controller.isAnimating) return;
+    _clock = next;
     _controller
-      ..duration = _period
-      ..repeat(reverse: _family == null);
+      ..duration = next.period
+      ..repeat(reverse: next.reverse);
   }
 
   @override
@@ -472,24 +483,65 @@ class _ProfileEffectOverlayState extends State<ProfileEffectOverlay>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
 
+  /// O período com que o relógio está aceso hoje, ou null quando ele está apagado.
+  Duration? _running;
+
+  /// O aparelho pediu menos movimento (`MediaQuery.disableAnimations`). Aqui isso
+  /// não é capricho: o estroboscópio é o único cosmético que pisca luz cobrindo o
+  /// cartão inteiro, e piscar é justamente o que essa opção desliga.
+  bool get _still => MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(
       vsync: this,
       duration: EffectSpec.from(widget.effect).cycle,
-    )..repeat();
+    );
+  }
+
+  /// O relógio acende aqui e não no `initState` porque a decisão depende do
+  /// `MediaQuery` do aparelho — e ler um inherited widget antes de `initState`
+  /// terminar é o que faz a camada não reagir quando o pedido muda.
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _applyClock();
+  }
+
+  /// Acende o ciclo do item equipado — ou apaga tudo, quando o sistema pede
+  /// movimento reduzido. `repeat()` grava o período no instante em que é chamado,
+  /// então trocar de item sem reacender deixaria a névoa nova respirando no ciclo
+  /// do estroboscópio antigo; reacender sem necessidade recomeçaria a animação
+  /// a cada `setState` do perfil.
+  void _applyClock() {
+    final period = EffectSpec.from(widget.effect).cycle;
+    if (_still) {
+      if (_running != null) {
+        // Apagar no meio deixa o anel parado onde o clarão estava: o quadro
+        // inicial é o mesmo que a tela mostra para quem comprou o item com o
+        // aparelho já em movimento reduzido.
+        _controller
+          ..stop()
+          ..value = 0;
+        _running = null;
+      }
+      return;
+    }
+    if (_running == period && _controller.isAnimating) return;
+    _running = period;
+    _controller
+      ..duration = period
+      ..repeat();
   }
 
   @override
   void didUpdateWidget(ProfileEffectOverlay oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.effect.id == widget.effect.id) return;
     // Outro item é outro ciclo: névoa respira em segundos, estroboscópio pisca
-    // em menos de um. Ajustar a duração é o que faz a prévia tocar no ritmo que
+    // em menos de um. Ajustar o relógio é o que faz a prévia tocar no ritmo que
     // o servidor deu.
-    _controller.duration = EffectSpec.from(widget.effect).cycle;
-    _controller.repeat();
+    _applyClock();
   }
 
   @override
