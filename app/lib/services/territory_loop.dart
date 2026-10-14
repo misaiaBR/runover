@@ -102,17 +102,26 @@ class TerritoryLoop {
     return sum.abs() / 2;
   }
 
+  /// Intervalo entre dois pontos, em segundos com casas decimais — a mesma base
+  /// de tempo do servidor. Zero quando não há intervalo utilizável, para quem
+  /// chamar decidir só pelo que é movimento de verdade.
+  static double intervalSeconds(
+    Map<String, dynamic> from,
+    Map<String, dynamic> to,
+  ) {
+    final t1 = DateTime.tryParse('${from['timestamp']}');
+    final t2 = DateTime.tryParse('${to['timestamp']}');
+    if (t1 == null || t2 == null) return 0;
+    return t2.difference(t1).inMicroseconds / 1000000;
+  }
+
   /// Velocidade média que o servidor calcularia entre dois pontos do trajeto.
   /// Microssegundos, não segundos inteiros: o backend divide pela duração
   /// fracionária, e truncar aqui daria velocidade zero a um intervalo de 0,9 s
   /// (o ponto passaria e o envio seria recusado depois) e velocidade inflada a
-  /// 1,9 s (a corrida pararia sem motivo). Zero quando o intervalo não é
-  /// utilizável, para a chamada decidir só pelo que é movimento rápido.
+  /// 1,9 s (a corrida pararia sem motivo).
   static double speedMps(Map<String, dynamic> from, Map<String, dynamic> to) {
-    final t1 = DateTime.tryParse('${from['timestamp']}');
-    final t2 = DateTime.tryParse('${to['timestamp']}');
-    if (t1 == null || t2 == null) return 0;
-    final seconds = t2.difference(t1).inMicroseconds / 1000000;
+    final seconds = intervalSeconds(from, to);
     if (seconds <= 0) return 0;
     return _distanceM(_lat(from), _lng(from), _lat(to), _lng(to)) / seconds;
   }

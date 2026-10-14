@@ -1,10 +1,37 @@
 import 'package:geolocator/geolocator.dart';
 
+import '../services/territory_loop.dart';
+
 class TrackingScreenRouteProcessor {
   static const double _maxAccuracyMeters = 50;
-  static const double _maxJumpMeters = 250;
-  static const int _jumpWindowSeconds = 5;
+
+  /// Janela do "salto" do GPS: longe demais, rápido demais, e o próximo ponto
+  /// volta para o lugar. Ficam públicos porque a tela da corrida julga esse
+  /// mesmo par para decidir entre descartar uma leitura torta e parar a
+  /// gravação.
+  static const double maxJumpMeters = 250;
+  static const double jumpWindowSeconds = 5;
   static const double _minRouteSpacingMeters = 12;
+
+  /// Um par acima do teto de velocidade que ainda cabe nesta janela de salto é
+  /// leitura torta do GPS, não veículo: 250 m em até 5 s. O intervalo é
+  /// fracionário, a mesma base de tempo de `TerritoryLoop.speedMps` e do
+  /// servidor — truncar em segundos faria um salto de 0,9 s passar por
+  /// movimento normal e um deslocamento de 5,9 s passar por salto.
+  static bool looksLikeBadFix(
+    Map<String, dynamic> previous,
+    Map<String, dynamic> next,
+  ) {
+    final elapsed = TerritoryLoop.intervalSeconds(previous, next);
+    if (elapsed <= 0 || elapsed > jumpWindowSeconds) return false;
+    return Geolocator.distanceBetween(
+      (previous['lat'] as num).toDouble(),
+      (previous['lng'] as num).toDouble(),
+      (next['lat'] as num).toDouble(),
+      (next['lng'] as num).toDouble(),
+    ) >
+        maxJumpMeters;
+  }
 
   static bool isUsablePoint(
     Map<String, dynamic> point, {
@@ -41,18 +68,7 @@ class TrackingScreenRouteProcessor {
             !currentTime.isAfter(previousTime)) {
           continue;
         }
-        final distance = Geolocator.distanceBetween(
-          (previous['lat'] as num).toDouble(),
-          (previous['lng'] as num).toDouble(),
-          (point['lat'] as num).toDouble(),
-          (point['lng'] as num).toDouble(),
-        );
-        final elapsedSeconds = currentTime.difference(previousTime).inSeconds;
-        if (elapsedSeconds > 0 &&
-            distance > _maxJumpMeters &&
-            elapsedSeconds <= _jumpWindowSeconds) {
-          continue;
-        }
+        if (looksLikeBadFix(previous, point)) continue;
       }
       filtered.add(Map<String, dynamic>.from(point));
     }
