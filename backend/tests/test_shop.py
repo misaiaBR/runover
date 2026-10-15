@@ -196,13 +196,37 @@ def _track_at(start, num_points=70):
     ]
 
 
-def _send_track(client, headers, track):
+def _send_track(client, headers, track, utc_offset_minutes=0):
     run_id = str(uuid4())
     response = client.post("/runs", json={
         "id": run_id, "request_id": run_id, "track": track, "conquer": False,
+        "utc_offset_minutes": utc_offset_minutes,
     }, headers=headers)
     assert response.status_code == 200, response.text
     return response.json()
+
+
+def test_day_bonus_does_not_follow_the_reported_offset(client, registered_user):
+    """Trocar o fuso entre corridas não reabre os bônus de dia.
+
+    O dia é o do aparelho, mas o aparelho é quem manda no pedido: sem a trava
+    de 24 h do servidor, o segundo envio alegando outro fuso parece outra manhã
+    e paga missão diária e sequência outra vez — o extrato vira uma torneira.
+    """
+    headers = _auth(registered_user)
+    day = (datetime.now(timezone.utc) - timedelta(days=1)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    _send_track(client, headers, _track_at(day))
+    # 12:00 UTC com o aparelho alegando UTC+14: outro dia local, outra "manhã".
+    second = _send_track(
+        client, headers,
+        _track_at(day + timedelta(hours=12)),
+        utc_offset_minutes=840,
+    )
+    assert second["coins_earned"] == int(
+        second["distance_m"] / 1000 * coins.COINS_PER_KM
+    )
 
 
 def test_streak_and_daily_bonus_pay_once_per_day(client, registered_user, db_session):
