@@ -129,7 +129,9 @@ class _MyTeamView extends StatelessWidget {
   Future<void> _act(BuildContext context, Future<void> Function() call) async {
     try {
       await call();
-      onChanged();
+      // O painel por trás recarrega só se este ainda estiver na árvore: fechar
+      // a aba durante a requisição é o caminho normal para sair da equipe.
+      if (context.mounted) onChanged();
     } on ApiException catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(
@@ -194,7 +196,9 @@ class _MyTeamView extends StatelessWidget {
           const SizedBox(height: 20),
           OutlinedButton.icon(
             onPressed: () async {
-              if (await confirmTeamExit(context, team)) onChanged();
+              if (!await confirmTeamExit(context, team)) return;
+              if (!context.mounted) return;
+              onChanged();
             },
             icon: const Icon(Icons.logout, size: 18),
             label: const Text('Sair da equipe'),

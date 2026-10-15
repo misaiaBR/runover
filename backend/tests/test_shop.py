@@ -178,6 +178,94 @@ def test_run_credits_coins(client, registered_user, db_session):
     assert me["coins_balance"] == earned
 
 
+def _track_at(start, num_points=70):
+    """O percurso de `_track`, mas começando em `start`.
+
+    Dois envios no mesmo dia precisam de trilha diferente: `track_hash` é
+    única na tabela.
+    """
+    base_lat, base_lng = -23.6489, -46.8523
+    step = 200 / 111_320
+    return [
+        {
+            "lat": base_lat + i * step,
+            "lng": base_lng,
+            "timestamp": (start + timedelta(seconds=60 * i)).isoformat(),
+        }
+        for i in range(num_points)
+    ]
+
+
+def _send_track(client, headers, track, utc_offset_minutes=0):
+    run_id = str(uuid4())
+    response = client.post("/runs", json={
+        "id": run_id, "request_id": run_id, "track": track, "conquer": False,
+        "utc_offset_minutes": utc_offset_minutes,
+    }, headers=headers)
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_day_bonus_does_not_follow_the_reported_offset(client, registered_user):
+    """Trocar o fuso entre corridas não reabre os bônus de dia.
+
+    O dia é o do aparelho, mas o aparelho é quem manda no pedido: sem a trava
+    de 24 h do servidor, o segundo envio alegando outro fuso parece outra manhã
+    e paga missão diária e sequência outra vez — o extrato vira uma torneira.
+    """
+    headers = _auth(registered_user)
+    day = (datetime.now(timezone.utc) - timedelta(days=1)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    _send_track(client, headers, _track_at(day))
+    # 12:00 UTC com o aparelho alegando UTC+14: outro dia local, outra "manhã".
+    second = _send_track(
+        client, headers,
+        _track_at(day + timedelta(hours=12)),
+        utc_offset_minutes=840,
+    )
+    assert second["coins_earned"] == int(
+        second["distance_m"] / 1000 * coins.COINS_PER_KM
+    )
+
+
+def test_streak_and_daily_bonus_pay_once_per_day(client, registered_user, db_session):
+    """Segunda corrida do mesmo dia só paga a distância.
+
+    A sequência é um bônus por dia consecutivo e a missão diária é a primeira
+    corrida do dia. Creditados a cada envio, quem corre duas vezes no dia recebia
+    os dois de novo, e o extrato mostrava duas linhas "Sequência de dias" no
+    mesmo dia.
+    """
+    headers = _auth(registered_user)
+    my_id = client.get("/users/me", headers=headers).json()["id"]
+    # Ontem, de madrugada: os dois envios caem no mesmo dia UTC e nenhum fica
+    # no futuro nem fora da janela de 7 dias.
+    day = (datetime.now(timezone.utc) - timedelta(days=1)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    first = _send_track(client, headers, _track_at(day))
+    second = _send_track(client, headers, _track_at(day + timedelta(hours=2)))
+
+    distance = int(first["distance_m"] / 1000 * coins.COINS_PER_KM)
+    assert first["coins_earned"] == (
+        distance + coins.DAILY_FIRST_RUN_BONUS + coins.STREAK_PER_DAY
+    )
+    assert second["coins_earned"] == int(
+        second["distance_m"] / 1000 * coins.COINS_PER_KM
+    )
+
+    reasons = [
+        row.reason
+        for row in db_session.query(CoinTransaction)
+        .filter_by(user_id=my_id)
+        .order_by(CoinTransaction.created_at)
+        .all()
+    ]
+    assert reasons.count("streak") == 1, reasons
+    assert reasons.count("missao_diaria") == 1, reasons
+
+
 def test_wallet_carries_the_earning_rates(client, registered_user):
     """A folha "como ganhar" do app lê as taxas daqui.
 
