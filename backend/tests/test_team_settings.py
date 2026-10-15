@@ -142,6 +142,51 @@ def test_join_by_token_enters_any_mode(client, registered_user):
     assert client.get("/teams/mine", headers=applicant).json()["id"] == team_id
 
 
+def _team_of(client, username, email, name):
+    """Cria a equipe com um dono próprio e devolve (headers do dono, id)."""
+    owner = _auth(_register(client, username, email))
+    created = client.post("/teams", json={"name": name}, headers=owner)
+    assert created.status_code == 201, created.text
+    return owner, created.json()["id"]
+
+
+def test_open_join_withdraws_pending_requests(client):
+    """Entrou em uma equipe, para de pedir entrada em todas as outras.
+
+    A regra já vale para o pedido aprovado (`test_approve_withdraws_other_pendings`)
+    e para o convite aceito. Sem ela nos outros dois caminhos de entrada, o admin
+    continua vendo na lista quem já tem equipe — e o único desfecho possível é um
+    409 — enquanto o card mostra "pedido enviado" para quem já entrou.
+    """
+    waiting_owner, waiting_id = _team_of(client, "espera", "espera@example.com", "Time Espera")
+    applicant = _auth(_register(client, "corredor", "corredor@example.com"))
+    assert client.post(f"/teams/{waiting_id}/join", headers=applicant).status_code == 202
+
+    joined_owner, joined_id = _team_of(client, "aberto", "aberto@example.com", "Time Aberto")
+    client.patch(f"/teams/{joined_id}", json={"join_mode": "open"}, headers=joined_owner)
+    assert client.post(f"/teams/{joined_id}/join", headers=applicant).status_code == 201
+
+    assert client.get(f"/teams/{waiting_id}/requests", headers=waiting_owner).json() == []
+    assert client.get(f"/teams/{waiting_id}", headers=applicant).json()["my_request"] is None
+
+
+def test_join_by_token_withdraws_pending_requests(client):
+    """O link de convite caduca os pedidos do mesmo jogador, como a aprovação."""
+    waiting_owner, waiting_id = _team_of(client, "espera", "espera@example.com", "Time Espera")
+    applicant = _auth(_register(client, "convidado", "convidado@example.com"))
+    assert client.post(f"/teams/{waiting_id}/join", headers=applicant).status_code == 202
+
+    host_owner, host_id = _team_of(client, "anfitriao", "anfitriao@example.com", "Time Convite")
+    client.patch(f"/teams/{host_id}", json={"join_mode": "invite_only"}, headers=host_owner)
+    token = client.post(
+        f"/teams/{host_id}/invite/regenerate", headers=host_owner,
+    ).json()["invite_token"]
+    assert client.post(f"/teams/join/{token}", headers=applicant).status_code == 201
+
+    assert client.get(f"/teams/{waiting_id}/requests", headers=waiting_owner).json() == []
+    assert client.get(f"/teams/{waiting_id}", headers=applicant).json()["my_request"] is None
+
+
 def test_join_by_invalid_token_is_missing(client, registered_user):
     applicant = _auth(_register(client, "convidado", "convidado@example.com"))
     response = client.post("/teams/join/convite-que-nao-existe", headers=applicant)

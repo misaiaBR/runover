@@ -221,6 +221,26 @@ def _to_detail(db: Session, team: Team, viewer_id: str | None = None) -> TeamDet
     )
 
 
+def _withdraw_other_requests(
+    db: Session, user_id: str, keep_id: str | None = None
+) -> None:
+    """Entrar em uma equipe caduca os pedidos e convites pendentes do jogador.
+
+    É uma regra só, do mesmo tamanho para os quatro caminhos de entrada —
+    pedido aprovado, convite aceito, equipe aberta e link de convite. Sem ela,
+    o admin de outra equipe continua vendo na lista alguém que nunca vai entrar
+    (aceitar devolve 409), e o card da pessoa mostra "pedido enviado" para quem
+    já tem equipe.
+    """
+    query = db.query(TeamJoinRequest).filter(
+        TeamJoinRequest.user_id == user_id,
+        TeamJoinRequest.status == "pending",
+    )
+    if keep_id is not None:
+        query = query.filter(TeamJoinRequest.id != keep_id)
+    query.delete(synchronize_session=False)
+
+
 @router.get("", response_model=list[TeamSummary])
 def list_teams(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     mine = user_team(db, current_user.id)
@@ -327,12 +347,7 @@ def accept_invite(request_id: str, db: Session = Depends(get_db), current_user: 
     db.add(TeamMember(team_id=team.id, user_id=current_user.id))
     req.status = "approved"
     req.decided_at = datetime.now(timezone.utc)
-    # Convites e pedidos do mesmo jogador em outras equipes caducam juntos.
-    db.query(TeamJoinRequest).filter(
-        TeamJoinRequest.user_id == current_user.id,
-        TeamJoinRequest.status == "pending",
-        TeamJoinRequest.id != req.id,
-    ).delete(synchronize_session=False)
+    _withdraw_other_requests(db, current_user.id, keep_id=req.id)
     if req.inviter:
         notify(db, req.inviter.id, f"@{current_user.username} aceitou o convite para {team.name}.", "equipe")
     db.commit()
@@ -385,6 +400,7 @@ def join_team(
         raise HTTPException(403, "Essa equipe só aceita quem tem o link de convite.")
     if (team.join_mode or "approval") == "open":
         db.add(TeamMember(team_id=team.id, user_id=current_user.id))
+        _withdraw_other_requests(db, current_user.id)
         db.commit()
         db.refresh(team)
         response.status_code = 201
@@ -420,6 +436,7 @@ def join_by_invite(token: str, db: Session = Depends(get_db), current_user: User
     if user_team(db, current_user.id):
         raise HTTPException(400, "Você já faz parte de uma equipe. Saia dela antes de entrar em outra.")
     db.add(TeamMember(team_id=team.id, user_id=current_user.id))
+    _withdraw_other_requests(db, current_user.id)
     db.commit()
     db.refresh(team)
     return _to_detail(db, team, current_user.id)
@@ -464,12 +481,7 @@ def _decide_request(db: Session, team: Team, request_id: str, approve: bool) -> 
             raise HTTPException(409, "O jogador já entrou em outra equipe.")
         db.add(TeamMember(team_id=team.id, user_id=req.user_id))
         req.status = "approved"
-        # Pedidos do mesmo jogador em outras equipes caducam juntos.
-        db.query(TeamJoinRequest).filter(
-            TeamJoinRequest.user_id == req.user_id,
-            TeamJoinRequest.status == "pending",
-            TeamJoinRequest.id != req.id,
-        ).delete(synchronize_session=False)
+        _withdraw_other_requests(db, req.user_id, keep_id=req.id)
         notify(db, req.user_id, f"Bem-vindo a {team.name}! Seu pedido foi aceito.", "equipe")
     else:
         req.status = "rejected"
