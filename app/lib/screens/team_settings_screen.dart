@@ -201,9 +201,12 @@ class _TeamSettingsScreenState extends State<TeamSettingsScreen> {
 
   void _set(TeamSettings next) => setState(() => _s = next);
 
-  void _toast(String message) => ScaffoldMessenger.of(
-    context,
-  ).showSnackBar(SnackBar(content: Text(message)));
+  void _toast(String message) {
+    // Chamado no `catch` de uma escrita: se a pessoa fechou a tela enquanto a
+    // requisição esperava, o messenger deste contexto já não existe.
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
 
   /// Chamada de escrita com o erro do servidor devolvido em mensagem, e o
   /// painel recarregado no fim — nada de botão que falha em silêncio.
@@ -212,7 +215,9 @@ class _TeamSettingsScreenState extends State<TeamSettingsScreen> {
     setState(() => _busy = true);
     try {
       final result = await call(context.read<AppState>().api);
-      widget.onChanged();
+      // Quem chamou já checa `mounted` antes de usar o retorno; o callback do
+      // pai é daqui, senão um pop durante a requisição acorda tela desmontada.
+      if (mounted) widget.onChanged();
       return result;
     } on ApiException catch (e) {
       _toast(e.message);
