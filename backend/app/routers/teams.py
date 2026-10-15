@@ -89,8 +89,16 @@ def transfer_ownership(db: Session, team: Team, exclude_user_id: str | None = No
     return team.creator_id
 
 
-def _dissolve_team(db: Session, team: Team) -> None:
-    """Dissolve com a mesma limpeza do disband: libera territórios e apaga vínculos."""
+def dissolve_team(db: Session, team: Team) -> None:
+    """A limpeza única de uma equipe que deixa de existir.
+
+    Usada pelos três caminhos que apagam um time: dissolver (`DELETE /teams`),
+    sair dissolvendo (`POST /teams/leave`) e excluir a conta do dono
+    (`users.py`). Cada um deles já teve sua própria lista de tabelas, e a que
+    faltava numa delas é um pedido de entrada órfão no `team_join_requests` — no
+    Postgres a exclusão morre na chave estrangeira antes mesmo de o usuário ver
+    a conta apagada.
+    """
     for member in list(team.members):
         db.delete(member)
     db.query(TeamAdmin).filter(TeamAdmin.team_id == team.id).delete(
@@ -834,10 +842,10 @@ def disband_team(
         if m.user_id != current_user.id
     ]
     team_name = team.name
-    # A limpeza é a mesma de sair dissolvendo (`_dissolve_team`): escrita em
+    # A limpeza é a mesma de sair dissolvendo (`dissolve_team`): escrita em
     # dobro é a receita de um dos dois caminhos ficar atrás num territory livre
     # ou num item de loja que não sumiu.
-    _dissolve_team(db, team)
+    dissolve_team(db, team)
     for uid in member_ids:
         notify(db, uid, f"A equipe {team_name} foi dissolvida.", "equipe")
     db.commit()
@@ -867,7 +875,7 @@ def leave_team(
             if data.dissolve:
                 member_ids = [m.user_id for m in others]
                 team_name = team.name
-                _dissolve_team(db, team)
+                dissolve_team(db, team)
                 for uid in member_ids:
                     notify(db, uid, f"A equipe {team_name} foi dissolvida.", "equipe")
                 db.commit()
@@ -887,7 +895,7 @@ def leave_team(
             db.flush()
             notify(db, successor.id, f"Você agora é dono de {team.name}.", "equipe")
         else:
-            _dissolve_team(db, team)
+            dissolve_team(db, team)
             db.commit()
             return None
     db.delete(membership)
