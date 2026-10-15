@@ -831,33 +831,15 @@ def disband_team(
     member_ids = [
         m.user_id
         for m in db.query(TeamMember).filter(TeamMember.team_id == team.id).all()
+        if m.user_id != current_user.id
     ]
-    db.query(TeamMember).filter(TeamMember.team_id == team.id).delete(
-        synchronize_session=False
-    )
-    db.query(TeamAdmin).filter(TeamAdmin.team_id == team.id).delete(
-        synchronize_session=False
-    )
-    db.query(TeamJoinRequest).filter(
-        TeamJoinRequest.team_id == team.id
-    ).delete(synchronize_session=False)
-    db.query(TeamItem).filter(TeamItem.team_id == team.id).delete(
-        synchronize_session=False
-    )
-    db.query(TerritoryOwnership).filter(
-        TerritoryOwnership.owner_team_id == team.id
-    ).update({TerritoryOwnership.owner_team_id: None})
-    db.query(ConquestMark).filter(
-        ConquestMark.owner_team_id == team.id
-    ).update({ConquestMark.owner_team_id: None})
-    db.query(ScoreEvent).filter(ScoreEvent.team_id == team.id).update(
-        {ScoreEvent.team_id: None}
-    )
-    db.query(Run).filter(Run.team_id == team.id).update({Run.team_id: None})
+    team_name = team.name
+    # A limpeza é a mesma de sair dissolvendo (`_dissolve_team`): escrita em
+    # dobro é a receita de um dos dois caminhos ficar atrás num territory livre
+    # ou num item de loja que não sumiu.
+    _dissolve_team(db, team)
     for uid in member_ids:
-        if uid != current_user.id:
-            notify(db, uid, f"A equipe {team.name} foi dissolvida.", "equipe")
-    db.delete(team)
+        notify(db, uid, f"A equipe {team_name} foi dissolvida.", "equipe")
     db.commit()
     return None
 
