@@ -89,8 +89,16 @@ def transfer_ownership(db: Session, team: Team, exclude_user_id: str | None = No
     return team.creator_id
 
 
-def _dissolve_team(db: Session, team: Team) -> None:
-    """Dissolve com a mesma limpeza do disband: libera territórios e apaga vínculos."""
+def dissolve_team(db: Session, team: Team) -> None:
+    """A limpeza única de uma equipe que deixa de existir.
+
+    Usada pelos três caminhos que apagam um time: dissolver (`DELETE /teams`),
+    sair dissolvendo (`POST /teams/leave`) e excluir a conta do dono
+    (`users.py`). Cada um deles já teve sua própria lista de tabelas, e a que
+    faltava numa delas é um pedido de entrada órfão no `team_join_requests` — no
+    Postgres a exclusão morre na chave estrangeira antes mesmo de o usuário ver
+    a conta apagada.
+    """
     for member in list(team.members):
         db.delete(member)
     db.query(TeamAdmin).filter(TeamAdmin.team_id == team.id).delete(
@@ -221,6 +229,26 @@ def _to_detail(db: Session, team: Team, viewer_id: str | None = None) -> TeamDet
     )
 
 
+def _withdraw_other_requests(
+    db: Session, user_id: str, keep_id: str | None = None
+) -> None:
+    """Entrar em uma equipe caduca os pedidos e convites pendentes do jogador.
+
+    É uma regra só, do mesmo tamanho para os quatro caminhos de entrada —
+    pedido aprovado, convite aceito, equipe aberta e link de convite. Sem ela,
+    o admin de outra equipe continua vendo na lista alguém que nunca vai entrar
+    (aceitar devolve 409), e o card da pessoa mostra "pedido enviado" para quem
+    já tem equipe.
+    """
+    query = db.query(TeamJoinRequest).filter(
+        TeamJoinRequest.user_id == user_id,
+        TeamJoinRequest.status == "pending",
+    )
+    if keep_id is not None:
+        query = query.filter(TeamJoinRequest.id != keep_id)
+    query.delete(synchronize_session=False)
+
+
 @router.get("", response_model=list[TeamSummary])
 def list_teams(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     mine = user_team(db, current_user.id)
@@ -327,12 +355,7 @@ def accept_invite(request_id: str, db: Session = Depends(get_db), current_user: 
     db.add(TeamMember(team_id=team.id, user_id=current_user.id))
     req.status = "approved"
     req.decided_at = datetime.now(timezone.utc)
-    # Convites e pedidos do mesmo jogador em outras equipes caducam juntos.
-    db.query(TeamJoinRequest).filter(
-        TeamJoinRequest.user_id == current_user.id,
-        TeamJoinRequest.status == "pending",
-        TeamJoinRequest.id != req.id,
-    ).delete(synchronize_session=False)
+    _withdraw_other_requests(db, current_user.id, keep_id=req.id)
     if req.inviter:
         notify(db, req.inviter.id, f"@{current_user.username} aceitou o convite para {team.name}.", "equipe")
     db.commit()
@@ -385,6 +408,7 @@ def join_team(
         raise HTTPException(403, "Essa equipe só aceita quem tem o link de convite.")
     if (team.join_mode or "approval") == "open":
         db.add(TeamMember(team_id=team.id, user_id=current_user.id))
+        _withdraw_other_requests(db, current_user.id)
         db.commit()
         db.refresh(team)
         response.status_code = 201
@@ -420,6 +444,7 @@ def join_by_invite(token: str, db: Session = Depends(get_db), current_user: User
     if user_team(db, current_user.id):
         raise HTTPException(400, "Você já faz parte de uma equipe. Saia dela antes de entrar em outra.")
     db.add(TeamMember(team_id=team.id, user_id=current_user.id))
+    _withdraw_other_requests(db, current_user.id)
     db.commit()
     db.refresh(team)
     return _to_detail(db, team, current_user.id)
@@ -464,12 +489,7 @@ def _decide_request(db: Session, team: Team, request_id: str, approve: bool) -> 
             raise HTTPException(409, "O jogador já entrou em outra equipe.")
         db.add(TeamMember(team_id=team.id, user_id=req.user_id))
         req.status = "approved"
-        # Pedidos do mesmo jogador em outras equipes caducam juntos.
-        db.query(TeamJoinRequest).filter(
-            TeamJoinRequest.user_id == req.user_id,
-            TeamJoinRequest.status == "pending",
-            TeamJoinRequest.id != req.id,
-        ).delete(synchronize_session=False)
+        _withdraw_other_requests(db, req.user_id, keep_id=req.id)
         notify(db, req.user_id, f"Bem-vindo a {team.name}! Seu pedido foi aceito.", "equipe")
     else:
         req.status = "rejected"
@@ -819,33 +839,15 @@ def disband_team(
     member_ids = [
         m.user_id
         for m in db.query(TeamMember).filter(TeamMember.team_id == team.id).all()
+        if m.user_id != current_user.id
     ]
-    db.query(TeamMember).filter(TeamMember.team_id == team.id).delete(
-        synchronize_session=False
-    )
-    db.query(TeamAdmin).filter(TeamAdmin.team_id == team.id).delete(
-        synchronize_session=False
-    )
-    db.query(TeamJoinRequest).filter(
-        TeamJoinRequest.team_id == team.id
-    ).delete(synchronize_session=False)
-    db.query(TeamItem).filter(TeamItem.team_id == team.id).delete(
-        synchronize_session=False
-    )
-    db.query(TerritoryOwnership).filter(
-        TerritoryOwnership.owner_team_id == team.id
-    ).update({TerritoryOwnership.owner_team_id: None})
-    db.query(ConquestMark).filter(
-        ConquestMark.owner_team_id == team.id
-    ).update({ConquestMark.owner_team_id: None})
-    db.query(ScoreEvent).filter(ScoreEvent.team_id == team.id).update(
-        {ScoreEvent.team_id: None}
-    )
-    db.query(Run).filter(Run.team_id == team.id).update({Run.team_id: None})
+    team_name = team.name
+    # A limpeza é a mesma de sair dissolvendo (`dissolve_team`): escrita em
+    # dobro é a receita de um dos dois caminhos ficar atrás num territory livre
+    # ou num item de loja que não sumiu.
+    dissolve_team(db, team)
     for uid in member_ids:
-        if uid != current_user.id:
-            notify(db, uid, f"A equipe {team.name} foi dissolvida.", "equipe")
-    db.delete(team)
+        notify(db, uid, f"A equipe {team_name} foi dissolvida.", "equipe")
     db.commit()
     return None
 
@@ -873,7 +875,7 @@ def leave_team(
             if data.dissolve:
                 member_ids = [m.user_id for m in others]
                 team_name = team.name
-                _dissolve_team(db, team)
+                dissolve_team(db, team)
                 for uid in member_ids:
                     notify(db, uid, f"A equipe {team_name} foi dissolvida.", "equipe")
                 db.commit()
@@ -893,7 +895,7 @@ def leave_team(
             db.flush()
             notify(db, successor.id, f"Você agora é dono de {team.name}.", "equipe")
         else:
-            _dissolve_team(db, team)
+            dissolve_team(db, team)
             db.commit()
             return None
     db.delete(membership)

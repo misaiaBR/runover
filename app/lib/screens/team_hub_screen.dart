@@ -512,6 +512,8 @@ class _LightningSectionState extends State<_LightningSection> {
         widget.team.id,
         minutes,
       );
+      // A sessão abriu; recarregar o painel só faz sentido se ele ainda está aí.
+      if (!mounted) return;
       await widget.onChanged();
     } on ApiException catch (e) {
       if (!mounted) return;
