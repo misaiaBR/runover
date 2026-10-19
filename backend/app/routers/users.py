@@ -19,11 +19,9 @@ from app.models import (
     Run,
     ScoreEvent,
     Team,
-    TeamAdmin,
     TeamJoinRequest,
     TeamMember,
     TerritoryOwnership,
-    TeamItem,
     User,
     UserBadge,
     UserItem,
@@ -38,7 +36,7 @@ from app.services.scoring import (
     total_score,
     user_team,
 )
-from app.routers.teams import transfer_ownership
+from app.routers.teams import dissolve_team, transfer_ownership
 from app.services.usernames import username_taken
 
 router = APIRouter(tags=["usuários"])
@@ -222,22 +220,9 @@ def delete_my_account(
     for team in created:
         if team.creator_id != uid:
             continue  # dono já transferido acima
-        # Time só com o dono: dissolve junto com a conta.
-        for member in list(team.members):
-            db.delete(member)
-        db.query(TeamItem).filter(TeamItem.team_id == team.id).delete(
-            synchronize_session=False
-        )
-        db.query(TerritoryOwnership).filter(
-            TerritoryOwnership.owner_team_id == team.id
-        ).update({TerritoryOwnership.owner_team_id: None})
-        db.query(ConquestMark).filter(
-            ConquestMark.owner_team_id == team.id
-        ).update({ConquestMark.owner_team_id: None})
-        db.query(ScoreEvent).filter(ScoreEvent.team_id == team.id).update(
-            {ScoreEvent.team_id: None}
-        )
-        db.delete(team)
+        # Time só com o dono: dissolve junto com a conta, pela mesma limpeza
+        # dos caminhos que apagam um time pelo painel.
+        dissolve_team(db, team)
     db.query(TerritoryOwnership).filter(
         TerritoryOwnership.owner_user_id == uid
     ).update({TerritoryOwnership.owner_user_id: None})
