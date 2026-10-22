@@ -14,7 +14,7 @@ O backend está em `backend/app/`; as telas, serviços e testes Flutter estão e
 
 ## Executar localmente
 
-Requisitos: Python 3.12.10, Flutter 3.47.2, Dart 3.13.2 e, para Android, JDK 17 e Android SDK.
+Requisitos: Python 3.12 (a imagem de produção usa `python:3.12-slim`; o CI instala o 3.12.x que o runner tem), Flutter 3.47.2, Dart 3.13.2 e, para Android, JDK 17 e Android SDK.
 
 Use o FVM para travar o SDK na versão do projeto (ver `.fvmrc`):
 
