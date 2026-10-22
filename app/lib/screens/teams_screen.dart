@@ -61,6 +61,17 @@ class _TeamsScreenState extends State<TeamsScreen> {
     }
   }
 
+  /// Recarga pedida por quem vive dentro desta tela: o painel, a aba de
+  /// ingresso/criação e a rota empilhada das Configurações.
+  ///
+  /// A guarda fica aqui, no dono, e não nos filhos: uma escrita que deu certo
+  /// na tela de configurações precisa recarregar a lista mesmo se aquela rota
+  /// fechou enquanto a requisição esperava. Filho que chama o callback depois de
+  /// um `await` não tem como saber se este ainda está montado.
+  void _refresh() {
+    if (mounted) _load();
+  }
+
   @override
   Widget build(BuildContext context) {
     final team = _myTeam;
@@ -87,7 +98,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
                   MaterialPageRoute(
                     builder: (_) => TeamSettingsScreen(
                       team: team,
-                      onChanged: _load,
+                      onChanged: _refresh,
                     ),
                   ),
                 ),
@@ -103,8 +114,8 @@ class _TeamsScreenState extends State<TeamsScreen> {
             : RefreshIndicator(
                 onRefresh: _load,
                 child: _myTeam != null
-                    ? _MyTeamView(team: _myTeam!, onChanged: _load)
-                    : _JoinOrCreateView(onChanged: _load, error: _error),
+                    ? _MyTeamView(team: _myTeam!, onChanged: _refresh)
+                    : _JoinOrCreateView(onChanged: _refresh, error: _error),
               ),
     );
   }
@@ -129,9 +140,9 @@ class _MyTeamView extends StatelessWidget {
   Future<void> _act(BuildContext context, Future<void> Function() call) async {
     try {
       await call();
-      // O painel por trás recarrega só se este ainda estiver na árvore: fechar
-      // a aba durante a requisição é o caminho normal para sair da equipe.
-      if (context.mounted) onChanged();
+      // Sem checar `mounted` aqui: o que saiu de cena pode ser só este painel,
+      // e a escrita deu certo — quem precisa recarregar é o dono do callback.
+      onChanged();
     } on ApiException catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(
@@ -196,9 +207,7 @@ class _MyTeamView extends StatelessWidget {
           const SizedBox(height: 20),
           OutlinedButton.icon(
             onPressed: () async {
-              if (!await confirmTeamExit(context, team)) return;
-              if (!context.mounted) return;
-              onChanged();
+              if (await confirmTeamExit(context, team)) onChanged();
             },
             icon: const Icon(Icons.logout, size: 18),
             label: const Text('Sair da equipe'),

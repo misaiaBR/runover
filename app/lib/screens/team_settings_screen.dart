@@ -215,9 +215,10 @@ class _TeamSettingsScreenState extends State<TeamSettingsScreen> {
     setState(() => _busy = true);
     try {
       final result = await call(context.read<AppState>().api);
-      // Quem chamou já checa `mounted` antes de usar o retorno; o callback do
-      // pai é daqui, senão um pop durante a requisição acorda tela desmontada.
-      if (mounted) widget.onChanged();
+      // O callback é do dono da rota por baixo; ele decide se ainda faz
+      // sentido recarregar. Fechar esta tela no meio da requisição não pode
+      // esconder do painel uma escrita que deu certo.
+      widget.onChanged();
       return result;
     } on ApiException catch (e) {
       _toast(e.message);

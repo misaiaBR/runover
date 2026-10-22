@@ -38,6 +38,15 @@ class _TeamHubScreenState extends State<TeamHubScreen> {
     unawaited(_load());
   }
 
+  /// Recarga chamada pelos widgets desta tela depois de uma escrita (abrir ou
+  /// entrar num relâmpago). A guarda fica no dono do callback: `_load` lê o
+  /// contexto antes de qualquer `await`, então chamá-lo com esta State fora da
+  /// árvore arrebenta em vez de recarregar nada.
+  Future<void> _refresh() async {
+    if (!mounted) return;
+    await _load();
+  }
+
   Future<void> _load() async {
     final api = context.read<AppState>().api;
     TeamDetail? team;
@@ -161,7 +170,7 @@ class _TeamHubScreenState extends State<TeamHubScreen> {
                             team: team,
                             sessions: _lightning,
                             username: username,
-                            onChanged: _load,
+                            onChanged: _refresh,
                           ),
                           const SizedBox(height: 16),
                           Card(
@@ -512,8 +521,8 @@ class _LightningSectionState extends State<_LightningSection> {
         widget.team.id,
         minutes,
       );
-      // A sessão abriu; recarregar o painel só faz sentido se ele ainda está aí.
-      if (!mounted) return;
+      // Sem checar `mounted`: a sessão abriu, e quem recarrega é o dono do
+      // callback — ele sabe se ainda está na árvore.
       await widget.onChanged();
     } on ApiException catch (e) {
       if (!mounted) return;
