@@ -11,6 +11,6 @@ bcrypt==5.0.0
 shapely==2.2.0
 h3==4.5.0
 python-multipart==0.0.32
-psycopg[binary]==3.3.6
+psycopg[binary]==3.3.9
 httpx==0.28.1
 google-auth[requests]==2.62.0
