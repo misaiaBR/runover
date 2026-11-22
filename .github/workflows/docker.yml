@@ -13,7 +13,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - uses: docker/setup-buildx-action@v4
       # As imagens base do Dockerfile (python:3.12-slim, debian:bookworm-slim)
       # vêm da Docker Hub e o pull anônimo dos runners compartilha cota e
